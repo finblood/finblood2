@@ -6,9 +6,9 @@
 
 **Project Pemrograman Mobile Kelompok Finblood**
 
-- Very Irawan Simbolon (2315091092)
-- I Gede Surya Dharma Putra (2315091076)
-- I Putu Tonyco Satria Pradipta (2315091058)
+- **Very Irawan Simbolon (2315091092)**
+- **I Gede Surya Dharma Putra (2315091076)**
+- **I Putu Tonyco Satria Pradipta (2315091058)**
 
 Finblood adalah aplikasi mobile untuk memudahkan pencarian dan pendaftaran pendonor darah. Aplikasi ini membantu menghubungkan orang yang membutuhkan darah dengan sukarelawan pendonor darah dari berbagai kampus.
 
