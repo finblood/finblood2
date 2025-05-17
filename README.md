@@ -4,7 +4,7 @@
   <img src="assets/logofinblood/logomaroon.png" alt="Finblood Logo" width="250">
 </p>
 
-**Project Pemrograman Mobile Kelompok Finblood**
+### Project Pemrograman Mobile Kelompok Finblood
 
 - **Very Irawan Simbolon (2315091092)**
 - **I Gede Surya Dharma Putra (2315091076)**
