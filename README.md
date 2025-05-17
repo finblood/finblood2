@@ -99,3 +99,4 @@ Aplikasi ini menggunakan Cloud Functions untuk:
 ## Pengembangan Lebih Lanjut
 
 - Integrasi dengan rumah sakit dan PMI
+- Interaktif Carousel Slide (e.g., setiap slide dapat diklik untuk membuka artikel, halaman detail, atau tautan informasi kampanye).
