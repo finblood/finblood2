@@ -4,7 +4,7 @@
   <img src="assets/logofinblood/logofinblood.png" alt="Finblood Logo" width="250">
 </p>
 
-Project Pemrograman Mobile Kelompok Finblood
+##Project Pemrograman Mobile Kelompok Finblood
 
 - Very Irawan Simbolon (2315091092)
 - I Gede Surya Dharma Putra (2315091076)
@@ -23,9 +23,9 @@ Finblood adalah aplikasi mobile untuk memudahkan pencarian dan pendaftaran pendo
 ## Screenshot
 
 <p align="center">
-  <img src="assets/images/login3d.png" alt="Login Screen" width="200">
+  <img src="assets/images/ss1.png" alt="Login Screen" width="200">
   &nbsp;&nbsp;&nbsp;
-  <img src="assets/images/register3d.png" alt="Register Screen" width="200">
+  <img src="assets/images/ss2.png" alt="Register Screen" width="200">
 </p>
 
 ## Teknologi
