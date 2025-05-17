@@ -23,9 +23,13 @@ Finblood adalah aplikasi mobile untuk memudahkan pencarian dan pendaftaran pendo
 ## Screenshot
 
 <p align="center">
-  <img src="assets/images/ss1.png" alt="Login Screen" width="200">
+  <img src="assets/images/ss1.png" alt="Login Screen" width="150">
   &nbsp;&nbsp;&nbsp;
-  <img src="assets/images/ss2.png" alt="Register Screen" width="200">
+  <img src="assets/images/ss2.png" alt="Register Screen" width="150">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/images/ss3.png" alt="Home Screen" width="150">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/images/ss4.png" alt="Profile Screen" width="150">
 </p>
 
 ## Teknologi
