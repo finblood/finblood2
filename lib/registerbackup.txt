@@ -1,0 +1,416 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
+
+  @override
+  State<RegisterPage> createState() => _RegisterPageState();
+}
+
+class _RegisterPageState extends State<RegisterPage> {
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmController = TextEditingController();
+  final TextEditingController _namaController = TextEditingController();
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmController.dispose();
+    _namaController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _register() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    UserCredential? credential;
+    try {
+      print('[REGISTER] Mulai proses register');
+      // Cek apakah email sudah terdaftar
+      try {
+        final methods = await FirebaseAuth.instance.fetchSignInMethodsForEmail(
+          _emailController.text.trim(),
+        );
+        print('[REGISTER] fetchSignInMethodsForEmail result: $methods');
+        if (methods.isNotEmpty) {
+          setState(() {
+            _errorMessage =
+                'Email sudah terdaftar. Silakan gunakan email lain atau login.';
+          });
+          print('[REGISTER] Email sudah terdaftar, proses dihentikan');
+          return;
+        }
+      } catch (e) {
+        print("[REGISTER] Error checking email: $e");
+      }
+
+      // Validasi input sebelum membuat user
+      final email = _emailController.text.trim();
+      final password = _passwordController.text.trim();
+      final nama = _namaController.text.trim();
+
+      if (email.isEmpty || password.isEmpty || nama.isEmpty) {
+        setState(() {
+          _errorMessage = 'Semua field harus diisi.';
+        });
+        print('[REGISTER] Ada field kosong, proses dihentikan');
+        return;
+      }
+
+      print("[REGISTER] Creating user with email: $email");
+      credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      print("[REGISTER] UserCredential: $credential");
+
+      if (credential.user == null) {
+        print('[REGISTER] credential.user == null, throw error');
+        throw Exception('Failed to create user: User object is null');
+      }
+
+      print(
+        "[REGISTER] Updating display name for user: ${credential.user?.uid}",
+      );
+      // Update displayName
+      await credential.user?.updateDisplayName(nama);
+
+      print("[REGISTER] Saving user data to Firestore");
+      // Simpan ke Firestore
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(credential.user?.uid)
+            .set({
+              'nama': nama,
+              'email': email,
+              'emailVerified': false,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+        print('[REGISTER] Data user berhasil disimpan ke Firestore');
+      } catch (e) {
+        print("[REGISTER] Error saving to Firestore: $e");
+        // Lanjutkan meskipun gagal menyimpan ke Firestore
+      }
+
+      // Tunggu sebentar untuk memastikan data tersimpan
+      await Future.delayed(const Duration(seconds: 1));
+
+      print(
+        "[REGISTER] User created successfully, showing verification dialog",
+      );
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder:
+              (context) => AlertDialog(
+                title: const Text('Verifikasi Email'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Kami telah mengirim email verifikasi ke alamat email Anda. Silakan periksa inbox (dan folder spam) untuk memverifikasi email Anda.',
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      email,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Anda harus memverifikasi email sebelum dapat login.',
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () async {
+                      print(
+                        '[REGISTER] Tombol OK pada dialog verifikasi ditekan',
+                      );
+                      try {
+                        await FirebaseAuth.instance.signOut();
+                        print('[REGISTER] User signed out setelah register');
+                        if (context.mounted) {
+                          Navigator.of(context).pop(); // Tutup dialog
+                          Navigator.pop(context); // Kembali ke halaman login
+                        }
+                      } catch (e) {
+                        print("[REGISTER] Error during sign out: $e");
+                        if (context.mounted) {
+                          Navigator.of(context).pop(); // Tutup dialog
+                          Navigator.pop(context); // Kembali ke halaman login
+                        }
+                      }
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      String errorMessage;
+      switch (e.code) {
+        case 'email-already-in-use':
+          errorMessage =
+              'Email sudah terdaftar. Silakan gunakan email lain atau login.';
+          break;
+        case 'invalid-email':
+          errorMessage = 'Format email tidak valid.';
+          break;
+        case 'weak-password':
+          errorMessage =
+              'Password terlalu lemah. Gunakan password yang lebih kuat.';
+          break;
+        case 'operation-not-allowed':
+          errorMessage =
+              'Operasi tidak diizinkan. Silakan hubungi administrator.';
+          break;
+        default:
+          errorMessage = e.message ?? 'Terjadi kesalahan. Coba lagi.';
+      }
+      print(
+        "[REGISTER] Firebase Auth error in register: ${e.code} - ${e.message}",
+      );
+      setState(() {
+        _errorMessage = errorMessage;
+      });
+    } catch (e) {
+      print("[REGISTER] Error in register: $e");
+      print("[REGISTER] Error stack trace: " + e.toString());
+
+      // Jika user sudah terbuat tapi ada error lain
+      if (credential != null && credential.user != null) {
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder:
+                (context) => AlertDialog(
+                  title: const Text('Verifikasi Email'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Akun Anda telah berhasil dibuat. Silakan periksa email Anda untuk verifikasi.',
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _emailController.text.trim(),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () async {
+                        print('[REGISTER] Tombol OK pada dialog error ditekan');
+                        try {
+                          await FirebaseAuth.instance.signOut();
+                          print('[REGISTER] User signed out setelah error');
+                          if (context.mounted) {
+                            Navigator.of(context).pop(); // Tutup dialog
+                            Navigator.pop(context); // Kembali ke halaman login
+                          }
+                        } catch (e) {
+                          print(
+                            "[REGISTER] Error during sign out (error dialog): $e",
+                          );
+                          if (context.mounted) {
+                            Navigator.of(context).pop(); // Tutup dialog
+                            Navigator.pop(context); // Kembali ke halaman login
+                          }
+                        }
+                      },
+                      child: const Text('OK'),
+                    ),
+                  ],
+                ),
+          );
+        }
+      } else {
+        // Tampilkan error yang lebih jelas di UI
+        setState(() {
+          _errorMessage =
+              'Terjadi kesalahan saat mendaftar. Silakan coba lagi.\nDetail: ' +
+              e.toString();
+        });
+      }
+    } finally {
+      print('[REGISTER] Proses register selesai, isLoading=false');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Image.asset(
+          'assets/logofinblood/logomaroon.png',
+          height: 40,
+          fit: BoxFit.contain,
+        ),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        centerTitle: true,
+        elevation: 0,
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24.0, 0, 24.0, 24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset('assets/images/register.png', height: 150),
+                const SizedBox(height: 20),
+                const Text(
+                  'Buat Akun Baru',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF6C1022),
+                  ),
+                ),
+                const SizedBox(height: 5),
+                const Text(
+                  'Daftar untuk memulai',
+                  style: TextStyle(fontSize: 14, color: Color(0xFF6B6B6B)),
+                ),
+                const SizedBox(height: 24),
+                TextFormField(
+                  controller: _namaController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nama Lengkap',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(50)),
+                    ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Nama wajib diisi';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(50)),
+                    ),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Email wajib diisi';
+                    }
+                    if (!value.contains('@')) {
+                      return 'Format email tidak valid';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _passwordController,
+                  decoration: const InputDecoration(
+                    labelText: 'Kata Sandi',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(50)),
+                    ),
+                  ),
+                  obscureText: true,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Password wajib diisi';
+                    }
+                    if (value.length < 6) {
+                      return 'Password minimal 6 karakter';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmController,
+                  decoration: const InputDecoration(
+                    labelText: 'Konfirmasi Kata Sandi',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(50)),
+                    ),
+                  ),
+                  obscureText: true,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Konfirmasi password wajib diisi';
+                    }
+                    if (value != _passwordController.text) {
+                      return 'Password tidak sama';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _register,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6C1022),
+                      foregroundColor: Colors.white,
+                      textStyle: const TextStyle(fontSize: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(50),
+                      ),
+                    ),
+                    child:
+                        _isLoading
+                            ? const CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            )
+                            : const Text(
+                              'Daftar',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

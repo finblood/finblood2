@@ -1,0 +1,684 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'main.dart';
+import 'register.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _isLoading = false;
+  String? _errorMessage;
+  bool _showResendButton = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  // Fungsi untuk mengirim ulang email verifikasi
+  Future<void> _resendVerificationEmail() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      // Coba login kembali untuk mendapatkan user
+      final email = _emailController.text.trim();
+      final password = _passwordController.text.trim();
+
+      if (email.isEmpty || password.isEmpty) {
+        setState(() {
+          _errorMessage =
+              'Masukkan email dan kata sandi untuk mengirim ulang verifikasi';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+
+      final User? user = userCredential.user;
+      if (user != null) {
+        // Alih-alih menggunakan sendEmailVerification(), update Firestore document
+        // untuk memicu cloud function yang mengirim email kustom
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({
+              'verificationEmailSent': false,
+              'verificationEmailSentAt': null,
+              'resendVerification': true,
+              'resendVerificationAt': FieldValue.serverTimestamp(),
+            });
+
+        // Tunggu sebentar untuk memastikan data tersimpan dan cloud function terpicu
+        await Future.delayed(const Duration(seconds: 1));
+
+        // Logout setelah mengirim email verifikasi
+        await FirebaseAuth.instance.signOut();
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Email verifikasi telah dikirim ulang. Silakan periksa inbox Anda.',
+              ),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _errorMessage = 'Gagal mengirim email: ${e.message}';
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Terjadi kesalahan saat mengirim email verifikasi';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  // Fungsi untuk reset password
+  Future<void> _resetPassword(BuildContext context) async {
+    final TextEditingController emailController = TextEditingController();
+    bool isLoading = false;
+    // Pre-fill email field if already entered in login form
+    if (_emailController.text.isNotEmpty) {
+      emailController.text = _emailController.text.trim();
+    }
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setDialogState) {
+            return AlertDialog(
+              title: const Text(
+                'Atur Ulang Kata Sandi',
+                style: TextStyle(
+                  color: Color(0xFF6C1022),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Masukkan email akun Anda untuk menerima tautan atur ulang kata sandi.',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: emailController,
+                      decoration: const InputDecoration(
+                        labelText: 'Email',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(50)),
+                          borderSide: BorderSide(color: Color(0xFF6C1022)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(50)),
+                          borderSide: BorderSide(color: Color(0xFF6C1022)),
+                        ),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 16,
+                        ),
+                        labelStyle: TextStyle(color: Color(0xFF6B6B6B)),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(50)),
+                          borderSide: BorderSide(
+                            color: Color(0xFF6C1022),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  child: const Text(
+                    'Batal',
+                    style: TextStyle(color: Color(0xFF6C1022)),
+                  ),
+                  onPressed:
+                      isLoading
+                          ? null
+                          : () => Navigator.of(dialogContext).pop(),
+                ),
+                TextButton(
+                  child:
+                      isLoading
+                          ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFF6C1022),
+                              ),
+                              strokeWidth: 2,
+                            ),
+                          )
+                          : const Text(
+                            'Kirim',
+                            style: TextStyle(
+                              color: Color(0xFF6C1022),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  onPressed:
+                      isLoading
+                          ? null
+                          : () async {
+                            final email = emailController.text.trim();
+                            if (email.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Email wajib diisi'),
+                                ),
+                              );
+                              return;
+                            }
+
+                            setDialogState(() => isLoading = true);
+                            print(
+                              '[RESET_PASSWORD] Sending reset link to: $email',
+                            );
+
+                            try {
+                              // Send password reset email - menggunakan template default Firebase
+                              await FirebaseAuth.instance
+                                  .sendPasswordResetEmail(email: email);
+
+                              if (context.mounted) {
+                                Navigator.of(dialogContext).pop();
+
+                                // Show a more detailed success message
+                                showDialog(
+                                  context: context,
+                                  builder:
+                                      (context) => AlertDialog(
+                                        title: const Text(
+                                          'Reset Kata Sandi',
+                                          style: TextStyle(
+                                            color: Color(0xFF6C1022),
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        content: const Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Tautan reset kata sandi telah dikirim ke email Anda jika terdaftar dalam sistem.',
+                                            ),
+                                            SizedBox(height: 12),
+                                            Text(
+                                              'Petunjuk:',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            Text(
+                                              '1. Periksa email Anda (termasuk folder spam)',
+                                            ),
+                                            Text(
+                                              '2. Klik tautan di email dan buat kata sandi baru',
+                                            ),
+                                            Text(
+                                              '3. Buka kembali aplikasi dan login dengan kata sandi baru',
+                                            ),
+                                          ],
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            child: const Text(
+                                              'OK',
+                                              style: TextStyle(
+                                                color: Color(0xFF6C1022),
+                                              ),
+                                            ),
+                                            onPressed:
+                                                () =>
+                                                    Navigator.of(context).pop(),
+                                          ),
+                                        ],
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            15,
+                                          ),
+                                        ),
+                                      ),
+                                );
+                              }
+                            } on FirebaseAuthException catch (e) {
+                              print(
+                                '[RESET_PASSWORD] Firebase Error: ${e.code} - ${e.message}',
+                              );
+                              setDialogState(() => isLoading = false);
+
+                              // Untuk kasus user-not-found, tutup dialog tanpa pesan error
+                              // Ini agar UX tetap baik dan tidak mengungkapkan info keamanan
+                              if (e.code == 'user-not-found') {
+                                Navigator.of(dialogContext).pop();
+                              } else {
+                                // Untuk error lain, tampilkan pesan error
+                                String errorMessage =
+                                    e.message ?? 'Terjadi kesalahan';
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(errorMessage)),
+                                );
+                              }
+                            } catch (e) {
+                              print('[RESET_PASSWORD] General error: $e');
+                              setDialogState(() => isLoading = false);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Terjadi kesalahan saat mengirim email reset',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                ),
+              ],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _login() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _showResendButton = false;
+    });
+
+    try {
+      // Login
+      final email = _emailController.text.trim();
+      final password = _passwordController.text.trim();
+
+      print('[LOGIN] Attempting to sign in with email: $email');
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+
+      // Reload user untuk mendapatkan status emailVerified terbaru
+      User? user = userCredential.user;
+      if (user != null) {
+        await user.reload();
+        user = FirebaseAuth.instance.currentUser;
+
+        if (!user!.emailVerified) {
+          // Email belum diverifikasi
+          await FirebaseAuth.instance.signOut();
+
+          if (mounted) {
+            setState(() {
+              _errorMessage =
+                  'Email belum diverifikasi. Silakan verifikasi email Anda terlebih dahulu.';
+              _showResendButton = true;
+              _isLoading = false;
+            });
+          }
+          return;
+        }
+
+        // Email sudah diverifikasi, simpan status login
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('isLoggedIn', true);
+          await prefs.setString('email', user.email ?? '');
+          await prefs.setString('uid', user.uid);
+
+          // Fetch user data from Firestore to get the name
+          try {
+            DocumentSnapshot userDoc =
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .get();
+
+            if (userDoc.exists) {
+              Map<String, dynamic> userData =
+                  userDoc.data() as Map<String, dynamic>;
+              String userName = userData['nama'] ?? '';
+              // Save the user's name to SharedPreferences for persistence
+              await prefs.setString('userName', userName);
+              print('[LOGIN] Saved user name to SharedPreferences: $userName');
+
+              // Update Firebase Auth displayName if empty or different
+              if (userName.isNotEmpty &&
+                  (user.displayName == null ||
+                      user.displayName!.isEmpty ||
+                      user.displayName != userName)) {
+                await user.updateDisplayName(userName);
+                print(
+                  '[LOGIN] Updated Firebase Auth displayName to: $userName',
+                );
+
+                // Reload the user to ensure changes are reflected
+                await user.reload();
+                print('[LOGIN] Reloaded user after displayName update');
+              }
+            }
+          } catch (firestoreError) {
+            print(
+              '[LOGIN] Error fetching user data from Firestore: $firestoreError',
+            );
+          }
+
+          print('[LOGIN] Successfully saved login state to SharedPreferences');
+        } catch (e) {
+          print("[LOGIN] Error saving to SharedPreferences: $e");
+          // Lanjutkan meskipun gagal menyimpan ke SharedPreferences
+        }
+
+        // Navigate to HomePage
+        if (context.mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const HomePage()),
+          );
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      print('[LOGIN] FirebaseAuthException: ${e.code} - ${e.message}');
+
+      String displayMessage;
+
+      // Handle specific error codes
+      switch (e.code) {
+        case 'invalid-credential':
+        case 'invalid-email':
+        case 'user-not-found':
+        case 'wrong-password':
+          displayMessage = 'Email atau kata sandi tidak valid.';
+          break;
+        case 'user-disabled':
+          displayMessage = 'Akun ini telah dinonaktifkan.';
+          break;
+        case 'too-many-requests':
+          displayMessage =
+              'Terlalu banyak percobaan login. Silakan coba lagi nanti.';
+          break;
+        default:
+          displayMessage = e.message ?? 'Terjadi kesalahan. Coba lagi.';
+      }
+
+      if (mounted) {
+        setState(() {
+          _errorMessage = displayMessage;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('[LOGIN] General error: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Terjadi kesalahan. Coba lagi.';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Image.asset(
+          'assets/logofinblood/logomaroon.png',
+          height: 40,
+          fit: BoxFit.contain,
+        ),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        centerTitle: true,
+        elevation: 0,
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24.0, 0, 24.0, 24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset('assets/images/login3d.png', height: 226),
+                const SizedBox(height: 20),
+                const Text(
+                  'Selamat Datang di Finblood',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF6C1022),
+                  ),
+                ),
+                const SizedBox(height: 5),
+                const Text(
+                  'Masuk untuk memulai',
+                  style: TextStyle(fontSize: 14, color: Color(0xFF6B6B6B)),
+                ),
+                const SizedBox(height: 24),
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(50)),
+                      borderSide: BorderSide(color: Color(0xFF6C1022)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(50)),
+                      borderSide: BorderSide(color: Color(0xFF6C1022)),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    labelStyle: TextStyle(color: Color(0xFF6B6B6B)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(50)),
+                      borderSide: BorderSide(
+                        color: Color(0xFF6C1022),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Email wajib diisi';
+                    }
+                    if (!value.contains('@')) {
+                      return 'Format email tidak valid';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _passwordController,
+                  decoration: const InputDecoration(
+                    labelText: 'Kata Sandi',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(50)),
+                      borderSide: BorderSide(color: Color(0xFF6C1022)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(50)),
+                      borderSide: BorderSide(color: Color(0xFF6C1022)),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    labelStyle: TextStyle(color: Color(0xFF6B6B6B)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(50)),
+                      borderSide: BorderSide(
+                        color: Color(0xFF6C1022),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  obscureText: true,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Kata Sandi wajib diisi';
+                    }
+                    if (value.length < 6) {
+                      return 'Kata Sandi minimal 6 karakter';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(color: Colors.red),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                if (_showResendButton)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: TextButton(
+                      onPressed: _isLoading ? null : _resendVerificationEmail,
+                      child: const Text(
+                        'Kirim ulang email verifikasi',
+                        style: TextStyle(
+                          color: Color(0xFF6C1022),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                // Tambahkan tombol lupa password
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => _resetPassword(context),
+                    child: const Text(
+                      'Lupa Kata Sandi?',
+                      style: TextStyle(
+                        color: Color(0xFF6C1022),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _login,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6C1022),
+                      foregroundColor: Colors.white,
+                      textStyle: const TextStyle(fontSize: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(50),
+                      ),
+                    ),
+                    child:
+                        _isLoading
+                            ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                                strokeWidth: 2.5,
+                              ),
+                            )
+                            : const Text(
+                              'Masuk',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RegisterPage(),
+                      ),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  child: RichText(
+                    text: const TextSpan(
+                      style: TextStyle(color: Color(0xFF6C1022)),
+                      children: [
+                        TextSpan(
+                          text: 'Belum punya akun? ',
+                          style: TextStyle(fontWeight: FontWeight.normal),
+                        ),
+                        TextSpan(
+                          text: 'Daftar',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

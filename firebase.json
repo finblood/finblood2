@@ -1,0 +1,58 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "fin-blood-2",
+          "appId": "1:419143544864:android:a8839c02fa91c6e0a38c45",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "fin-blood-2",
+          "appId": "1:419143544864:ios:79d184c127a6f7aaa38c45",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "fin-blood-2",
+          "appId": "1:419143544864:ios:79d184c127a6f7aaa38c45",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "fin-blood-2",
+          "configurations": {
+            "android": "1:419143544864:android:a8839c02fa91c6e0a38c45",
+            "ios": "1:419143544864:ios:79d184c127a6f7aaa38c45",
+            "macos": "1:419143544864:ios:79d184c127a6f7aaa38c45",
+            "web": "1:419143544864:web:331fa801dfa65b39a38c45",
+            "windows": "1:419143544864:web:a17f957b38af32c6a38c45"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs18"
+  },
+  "extensions": {
+    "firestore-send-email": {
+      "SMTP_CONNECTION_URI": "smtps://finbloodapp@gmail.com:hofgvzfzuioedyic@smtp.gmail.com:465",
+      "SMTP_PASSWORD": "hofgvzfzuioedyic",
+      "DEFAULT_FROM": "finbloodapp@gmail.com",
+      "DEFAULT_REPLY_TO": "finbloodapp@gmail.com",
+      "LOCATION": "nam5"
+    }
+  }
+}
