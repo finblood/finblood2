@@ -51,8 +51,8 @@ Finblood adalah aplikasi mobile untuk memudahkan pencarian dan pendaftaran pendo
 
 1. Clone repositori ini
    ```bash
-   git clone https://github.com/username/fin_blood2.git
-   cd fin_blood2
+   git clone https://github.com/verisimb/finblood.git
+   cd finblood
    ```
 
 2. Install dependencies
