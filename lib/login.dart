@@ -103,7 +103,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _resetPassword(BuildContext context) async {
     final TextEditingController emailController = TextEditingController();
     bool isLoading = false;
-    // Pre-fill email field if already entered in login form
+    // Isi awal field email jika sudah dimasukkan di form login
     if (_emailController.text.isNotEmpty) {
       emailController.text = _emailController.text.trim();
     }
@@ -208,18 +208,18 @@ class _LoginPageState extends State<LoginPage> {
 
                             setDialogState(() => isLoading = true);
                             print(
-                              '[RESET_PASSWORD] Sending reset link to: $email',
+                              '[RESET_PASSWORD] Mengirim tautan reset ke: $email',
                             );
 
                             try {
-                              // Send password reset email - menggunakan template default Firebase
+                              // Kirim email reset kata sandi - menggunakan template default Firebase
                               await FirebaseAuth.instance
                                   .sendPasswordResetEmail(email: email);
 
                               if (context.mounted) {
                                 Navigator.of(dialogContext).pop();
 
-                                // Show a more detailed success message
+                                // Tampilkan pesan sukses yang lebih detail
                                 showDialog(
                                   context: context,
                                   builder:
@@ -280,7 +280,7 @@ class _LoginPageState extends State<LoginPage> {
                               }
                             } on FirebaseAuthException catch (e) {
                               print(
-                                '[RESET_PASSWORD] Firebase Error: ${e.code} - ${e.message}',
+                                '[RESET_PASSWORD] Kesalahan Firebase: ${e.code} - ${e.message}',
                               );
                               setDialogState(() => isLoading = false);
 
@@ -297,7 +297,7 @@ class _LoginPageState extends State<LoginPage> {
                                 );
                               }
                             } catch (e) {
-                              print('[RESET_PASSWORD] General error: $e');
+                              print('[RESET_PASSWORD] Kesalahan umum: $e');
                               setDialogState(() => isLoading = false);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
@@ -334,7 +334,7 @@ class _LoginPageState extends State<LoginPage> {
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
 
-      print('[LOGIN] Attempting to sign in with email: $email');
+      print('[LOGIN] Mencoba masuk dengan email: $email');
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email, password: password);
 
@@ -366,7 +366,7 @@ class _LoginPageState extends State<LoginPage> {
           await prefs.setString('email', user.email ?? '');
           await prefs.setString('uid', user.uid);
 
-          // Fetch user data from Firestore to get the name
+          // Ambil data pengguna dari Firestore untuk mendapatkan nama
           try {
             DocumentSnapshot userDoc =
                 await FirebaseFirestore.instance
@@ -378,38 +378,42 @@ class _LoginPageState extends State<LoginPage> {
               Map<String, dynamic> userData =
                   userDoc.data() as Map<String, dynamic>;
               String userName = userData['nama'] ?? '';
-              // Save the user's name to SharedPreferences for persistence
+              // Simpan nama pengguna ke SharedPreferences untuk persistensi
               await prefs.setString('userName', userName);
-              print('[LOGIN] Saved user name to SharedPreferences: $userName');
+              print(
+                '[LOGIN] Nama pengguna disimpan ke SharedPreferences: $userName',
+              );
 
-              // Update Firebase Auth displayName if empty or different
+              // Perbarui Firebase Auth displayName jika kosong atau berbeda
               if (userName.isNotEmpty &&
                   (user.displayName == null ||
                       user.displayName!.isEmpty ||
                       user.displayName != userName)) {
                 await user.updateDisplayName(userName);
                 print(
-                  '[LOGIN] Updated Firebase Auth displayName to: $userName',
+                  '[LOGIN] Firebase Auth displayName diperbarui menjadi: $userName',
                 );
 
-                // Reload the user to ensure changes are reflected
+                // Muat ulang pengguna untuk memastikan perubahan tercermin
                 await user.reload();
-                print('[LOGIN] Reloaded user after displayName update');
+                print(
+                  '[LOGIN] Pengguna dimuat ulang setelah pembaruan displayName',
+                );
               }
             }
           } catch (firestoreError) {
             print(
-              '[LOGIN] Error fetching user data from Firestore: $firestoreError',
+              '[LOGIN] Kesalahan mengambil data pengguna dari Firestore: $firestoreError',
             );
           }
 
-          print('[LOGIN] Successfully saved login state to SharedPreferences');
+          print('[LOGIN] Berhasil menyimpan status login ke SharedPreferences');
         } catch (e) {
-          print("[LOGIN] Error saving to SharedPreferences: $e");
+          print("[LOGIN] Kesalahan menyimpan ke SharedPreferences: $e");
           // Lanjutkan meskipun gagal menyimpan ke SharedPreferences
         }
 
-        // Navigate to HomePage
+        // Navigasi ke HomePage
         if (context.mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (context) => const HomePage()),
@@ -417,11 +421,11 @@ class _LoginPageState extends State<LoginPage> {
         }
       }
     } on FirebaseAuthException catch (e) {
-      print('[LOGIN] FirebaseAuthException: ${e.code} - ${e.message}');
+      print('[LOGIN] Kesalahan FirebaseAuth: ${e.code} - ${e.message}');
 
       String displayMessage;
 
-      // Handle specific error codes
+      // Tangani kode kesalahan tertentu
       switch (e.code) {
         case 'invalid-credential':
         case 'invalid-email':
@@ -447,7 +451,7 @@ class _LoginPageState extends State<LoginPage> {
         });
       }
     } catch (e) {
-      print('[LOGIN] General error: $e');
+      print('[LOGIN] Kesalahan umum: $e');
       if (mounted) {
         setState(() {
           _errorMessage = 'Terjadi kesalahan. Coba lagi.';

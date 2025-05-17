@@ -24,7 +24,7 @@ Future<void> main() async {
           options: DefaultFirebaseOptions.currentPlatform,
         );
 
-        // Removed the signOut call to preserve user authentication state
+        // Menghapus pemanggilan signOut untuk mempertahankan status otentikasi pengguna
 
         print("Firebase berhasil di inisialisasikan");
       } catch (e) {
@@ -78,7 +78,6 @@ class _SplashScreenState extends State<SplashScreen> {
       final prefs = await SharedPreferences.getInstance();
       final onboardingCompleted =
           prefs.getBool('onboarding_completed') ?? false;
-      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
 
       await Future.delayed(
         const Duration(seconds: 1),
@@ -86,12 +85,12 @@ class _SplashScreenState extends State<SplashScreen> {
 
       if (mounted) {
         if (!onboardingCompleted) {
-          // First time app launch, show onboarding
+          // Pertama kali menjalankan aplikasi, tampilkan onboarding
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (context) => const OnboardingPage()),
           );
         } else {
-          // Onboarding already completed, check authentication
+          // Onboarding sudah selesai, periksa otentikasi
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (context) => const AuthWrapper()),
           );
@@ -144,10 +143,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
 
       if (isLoggedIn && FirebaseAuth.instance.currentUser == null) {
-        // We found saved login details but Firebase doesn't have a current user
-        // This means Firebase persistence might be having issues
+        // Menemukan detail login tersimpan tetapi Firebase tidak memiliki pengguna saat ini
+        // Ini berarti persistensi Firebase mungkin mengalami masalah
         print(
-          "Found saved login but no Firebase Auth user - trying to restore session",
+          "Menemukan login tersimpan tetapi tidak ada pengguna Firebase Auth - mencoba memulihkan sesi",
         );
         if (mounted) {
           setState(() {
@@ -174,7 +173,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    // If there's an error, show it
+    // Jika ada kesalahan, tampilkan
     if (_hasError) {
       return Scaffold(
         body: Center(
@@ -207,15 +206,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    // If we're still checking preferences, show loading
+    // Jika masih memeriksa preferensi, tampilkan loading
     if (_checkingPrefs) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // If SharedPreferences says user is logged in but Firebase Auth doesn't have a current user,
-    // we can directly send users to Home page instead of Login page again
+    // Jika SharedPreferences mengatakan pengguna telah login tetapi Firebase Auth tidak memiliki pengguna saat ini,
+    // kita dapat langsung mengirim pengguna ke halaman Beranda daripada ke halaman Login lagi
     if (_foundSavedUser) {
-      print("SharedPreferences says user is logged in, showing HomePage");
+      print(
+        "SharedPreferences menyatakan pengguna telah login, menampilkan HomePage",
+      );
       return const HomePage();
     }
 
@@ -224,18 +225,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
       builder: (context, snapshot) {
         try {
           print(
-            "Auth state changed: hasData=${snapshot.hasData}, connectionState=${snapshot.connectionState}",
+            "Status auth berubah: hasData=${snapshot.hasData}, connectionState=${snapshot.connectionState}",
           );
 
-          // Check if there's any error
+          // Periksa jika ada kesalahan
           if (snapshot.hasError) {
-            print("Auth stream error: ${snapshot.error}");
+            print("Kesalahan stream Auth: ${snapshot.error}");
             return Scaffold(
               body: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('Authentication error: ${snapshot.error}'),
+                    Text('Kesalahan otentikasi: ${snapshot.error}'),
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: () {
@@ -254,7 +255,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
             );
           }
 
-          // Show loading while waiting for auth state
+          // Tampilkan loading saat menunggu status otentikasi
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
               body: Center(child: CircularProgressIndicator()),
@@ -265,15 +266,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
           if (snapshot.hasData && snapshot.data != null) {
             User user = snapshot.data!;
             print(
-              "User authenticated: ${user.email}, emailVerified=${user.emailVerified}",
+              "Pengguna terautentikasi: ${user.email}, emailVerified=${user.emailVerified}",
             );
 
             // Pastikan email sudah diverifikasi
             if (user.emailVerified) {
-              print("Navigating to HomePage");
+              print("Navigasi ke HomePage");
               return const HomePage();
             } else {
-              print("Email not verified, signing out");
+              print("Email belum diverifikasi, keluar");
               // Sign out jika email belum diverifikasi
               FirebaseAuth.instance.signOut();
               return Scaffold(
@@ -300,11 +301,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
           }
 
           // Jika tidak ada user yang login
-          print("No authenticated user, showing LoginPage");
+          print(
+            "Tidak ada pengguna yang terautentikasi, menampilkan LoginPage",
+          );
           return const LoginPage();
         } catch (e) {
-          print("Error in AuthWrapper: $e");
-          // If any error happens during rendering, show login page
+          print("Kesalahan di AuthWrapper: $e");
+          // Jika terjadi kesalahan selama rendering, tampilkan halaman login
           return const LoginPage();
         }
       },
@@ -312,7 +315,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 }
 
-// HomePage
+// Halaman Beranda
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -369,7 +372,7 @@ class HomePage extends StatelessWidget {
             tooltip: 'Logout',
             onPressed: () async {
               try {
-                // Show confirmation dialog
+                // Tampilkan dialog konfirmasi
                 final bool confirmLogout =
                     await showDialog(
                       context: context,
@@ -415,33 +418,35 @@ class HomePage extends StatelessWidget {
 
                 if (!confirmLogout) return;
 
-                // Clear shared preferences
+                // Hapus shared preferences
                 SharedPreferences prefs = await SharedPreferences.getInstance();
-                // Preserve onboarding flag to avoid showing onboarding again
+                // Pertahankan flag onboarding untuk menghindari menampilkan onboarding lagi
                 bool onboardingCompleted =
                     prefs.getBool('onboarding_completed') ?? false;
-                await prefs.clear(); // Clear all data, not just login flags
+                await prefs.clear(); // Hapus semua data, bukan hanya flag login
                 await prefs.setBool(
                   'onboarding_completed',
                   onboardingCompleted,
-                ); // Restore onboarding flag
+                ); // Kembalikan flag onboarding
                 print(
-                  "Cleared login data from SharedPreferences but preserved onboarding status",
+                  "Data login dihapus dari SharedPreferences tetapi status onboarding dipertahankan",
                 );
 
-                // Sign out from Firebase
+                // Keluar dari Firebase
                 await FirebaseAuth.instance.signOut();
-                print("User signed out from Firebase");
+                print("Pengguna keluar dari Firebase");
 
-                // For a more thorough cleanup, recreate Firebase instance
+                // Untuk pembersihan yang lebih menyeluruh, buat ulang instance Firebase
                 try {
                   await Firebase.initializeApp(
                     options: DefaultFirebaseOptions.currentPlatform,
                   );
-                  print("Reinitialized Firebase app");
+                  print("Menginisialisasi ulang aplikasi Firebase");
                 } catch (reinitError) {
-                  print("Error reinitializing Firebase: $reinitError");
-                  // Continue even if reinitialization fails
+                  print(
+                    "Kesalahan saat menginisialisasi ulang Firebase: $reinitError",
+                  );
+                  // Lanjutkan meskipun inisialisasi ulang gagal
                 }
 
                 if (context.mounted) {
@@ -451,8 +456,8 @@ class HomePage extends StatelessWidget {
                   );
                 }
               } catch (e) {
-                print("Error during logout: $e");
-                // Even if there's an error, try to navigate back to login
+                print("Kesalahan saat logout: $e");
+                // Bahkan jika ada kesalahan, coba navigasi kembali ke login
                 if (context.mounted) {
                   Navigator.of(context).pushAndRemoveUntil(
                     MaterialPageRoute(builder: (context) => const LoginPage()),
@@ -466,7 +471,7 @@ class HomePage extends StatelessWidget {
       ),
       body: Column(
         children: [
-          // Non-scrollable top section
+          // Bagian atas yang tidak dapat di-scroll
           Container(
             width: double.infinity,
             decoration: const BoxDecoration(
@@ -488,7 +493,7 @@ class HomePage extends StatelessWidget {
                       return const CircularProgressIndicator();
                     }
 
-                    // Default fallback name
+                    // Nama default
                     String nama = 'Pengguna';
 
                     return FutureBuilder<SharedPreferences>(
@@ -500,28 +505,30 @@ class HomePage extends StatelessWidget {
                         }
 
                         if (prefsSnapshot.hasData) {
-                          // Try to get name from SharedPreferences first
+                          // Coba dapatkan nama dari SharedPreferences terlebih dahulu
                           String? savedName = prefsSnapshot.data!.getString(
                             'userName',
                           );
                           if (savedName != null && savedName.isNotEmpty) {
                             nama =
-                                savedName.split(' ')[0]; // Get first name only
+                                savedName.split(
+                                  ' ',
+                                )[0]; // Ambil nama depan saja
                             return _buildWelcomeText(nama);
                           }
                         }
 
-                        // If no name in SharedPreferences, try Firebase Auth
+                        // Jika tidak ada nama di SharedPreferences, coba Firebase Auth
                         if (snapshot.hasData) {
                           final user = snapshot.data!;
 
-                          // Try to get from Firebase Auth displayName
+                          // Coba dapatkan dari displayName Firebase Auth
                           if (user.displayName != null &&
                               user.displayName!.isNotEmpty) {
                             nama = user.displayName!.split(' ')[0];
                             return _buildWelcomeText(nama);
                           } else {
-                            // If not in Auth, try to get from Firestore
+                            // Jika tidak ada di Auth, coba dapatkan dari Firestore
                             return FutureBuilder<DocumentSnapshot>(
                               future:
                                   FirebaseFirestore.instance
@@ -533,7 +540,7 @@ class HomePage extends StatelessWidget {
                                     ConnectionState.waiting) {
                                   return _buildWelcomeText(
                                     'Pengguna',
-                                  ); // Temporarily show "Pengguna"
+                                  ); // Sementara tampilkan "Pengguna"
                                 }
 
                                 if (userSnapshot.hasData &&
@@ -545,7 +552,7 @@ class HomePage extends StatelessWidget {
                                       userData['nama'] != null) {
                                     final namaLengkap =
                                         userData['nama'].toString();
-                                    // Just get first name
+                                    // Ambil nama depan saja
                                     nama = namaLengkap.split(' ')[0];
                                   }
                                 }
@@ -628,11 +635,11 @@ class HomePage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          // Non-scrollable carousel section
+          // Bagian carousel yang tidak dapat di-scroll
           CarouselSection(imgList: imgList),
           const SizedBox(height: 10),
 
-          // Campus ranking section header
+          // Header bagian ranking kampus
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16.0),
             child: Center(
@@ -649,7 +656,7 @@ class HomePage extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          // Only the campus ranking section is scrollable
+          // Hanya bagian ranking kampus yang dapat di-scroll
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -882,7 +889,7 @@ class CardRankKampus extends StatelessWidget {
   }
 }
 
-// Class ini dibutuhkan untuk referensi di kode
+// Kelas ini dibutuhkan untuk referensi di kode
 class DaftarPendonorListPage extends StatefulWidget {
   const DaftarPendonorListPage({super.key});
 
@@ -1322,7 +1329,7 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
   }
 }
 
-// Class ini tidak digunakan sekarang tetapi diperlukan untuk _DaftarPendonorPageState
+// Kelas ini tidak digunakan sekarang tetapi diperlukan untuk _DaftarPendonorPageState
 class DaftarPendonorPage extends StatefulWidget {
   const DaftarPendonorPage({super.key});
 

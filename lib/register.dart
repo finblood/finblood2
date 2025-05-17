@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Constants
+// Konstanta
 const String _cloudFunctionUrl =
     'https://us-central1-fin-blood-2.cloudfunctions.net/deleteUserAccount';
 const String _secretKey = 'finblood-dev-key-2024';
@@ -35,38 +35,38 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
-  // NAVIGATION HELPERS
+  // HELPER NAVIGASI
 
-  /// Safely navigate back to login screen after sign out
+  /// Navigasi kembali ke layar login setelah sign out dengan aman
   Future<void> _navigateBackToLogin(BuildContext context) async {
-    print('[REGISTER] Navigating back to login screen');
+    print('[REGISTER] Navigasi kembali ke layar login');
     if (context.mounted) {
       await Future.delayed(const Duration(milliseconds: 100));
-      Navigator.of(context).pop(); // Close dialog if open
+      Navigator.of(context).pop(); // Tutup dialog jika terbuka
       await Future.delayed(const Duration(milliseconds: 100));
-      Navigator.pop(context); // Return to login page
+      Navigator.pop(context); // Kembali ke halaman login
     }
   }
 
-  /// Sign out user and navigate back to login screen
+  /// Sign out pengguna dan navigasi kembali ke layar login
   Future<void> _signOutAndNavigateBack(BuildContext context) async {
-    print('[REGISTER] Signing out and navigating back');
+    print('[REGISTER] Keluar dan navigasi kembali');
     try {
       if (FirebaseAuth.instance.currentUser != null) {
         await FirebaseAuth.instance.signOut();
       }
     } catch (e) {
-      print('[REGISTER] Error during sign out: $e');
+      print('[REGISTER] Kesalahan selama sign out: $e');
     } finally {
       await _navigateBackToLogin(context);
     }
   }
 
-  // DIALOG HELPERS
+  // HELPER DIALOG
 
-  /// Show email verification success dialog
+  /// Menampilkan dialog sukses verifikasi email
   void _showVerificationDialog(BuildContext context, String email) {
-    print('[REGISTER] Showing verification success dialog');
+    print('[REGISTER] Menampilkan dialog verifikasi sukses');
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -115,13 +115,13 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  /// Show registration error dialog and clean up user account
+  /// Menampilkan dialog kesalahan registrasi dan membersihkan akun pengguna
   void _showErrorRegistrationDialog(
     BuildContext context,
     String email,
     String uid,
   ) {
-    print('[REGISTER] Showing registration error dialog');
+    print('[REGISTER] Menampilkan dialog kesalahan registrasi');
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -167,12 +167,14 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  // ACCOUNT CLEANUP HELPERS
+  // HELPER PEMBERSIHAN AKUN
 
-  /// Call cloud function to delete user account
+  /// Memanggil cloud function untuk menghapus akun pengguna
   Future<bool> _callDeleteUserCloudFunction(String uid) async {
     try {
-      print('[REGISTER] Calling cloud function to delete user: $uid');
+      print(
+        '[REGISTER] Memanggil cloud function untuk menghapus pengguna: $uid',
+      );
       final Uri uri = Uri.parse(
         '$_cloudFunctionUrl?uid=$uid&secretKey=$_secretKey',
       );
@@ -182,7 +184,7 @@ class _RegisterPageState extends State<RegisterPage> {
           .timeout(
             const Duration(seconds: 15),
             onTimeout: () {
-              print('[REGISTER] Timeout calling cloud function');
+              print('[REGISTER] Waktu memanggil cloud function habis');
               return http.Response('{"success":false,"error":"Timeout"}', 408);
             },
           );
@@ -193,57 +195,61 @@ class _RegisterPageState extends State<RegisterPage> {
       }
 
       print(
-        '[REGISTER] Failed to delete user via cloud function: ${response.statusCode}',
+        '[REGISTER] Gagal menghapus pengguna via cloud function: ${response.statusCode}',
       );
       return false;
     } catch (e) {
-      print('[REGISTER] Error calling cloud function: $e');
+      print('[REGISTER] Kesalahan saat memanggil cloud function: $e');
       return false;
     }
   }
 
-  /// Clean up user data and account after registration failure
+  /// Membersihkan data pengguna dan akun setelah kegagalan pendaftaran
   Future<void> _deleteUserAndNavigateBack(
     BuildContext context,
     String uid,
   ) async {
-    print('[REGISTER] Cleaning up user data and account');
+    print('[REGISTER] Membersihkan data dan akun pengguna');
     try {
-      // Delete Firestore user data
+      // Hapus data pengguna di Firestore
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .delete()
-          .then((_) => print('[REGISTER] User data deleted from Firestore'))
+          .then((_) => print('[REGISTER] Data pengguna dihapus dari Firestore'))
           .catchError(
-            (e) => print('[REGISTER] Error deleting from Firestore: $e'),
+            (e) =>
+                print('[REGISTER] Kesalahan saat menghapus dari Firestore: $e'),
           );
 
-      // Try cloud function first
+      // Coba gunakan cloud function terlebih dahulu
       bool deleted = await _callDeleteUserCloudFunction(uid);
 
-      // Fall back to direct deletion if needed
+      // Gunakan penghapusan langsung jika diperlukan
       if (!deleted) {
-        print('[REGISTER] Falling back to direct user deletion');
+        print('[REGISTER] Beralih ke penghapusan pengguna langsung');
         final User? currentUser = FirebaseAuth.instance.currentUser;
         if (currentUser != null) {
           await currentUser
               .delete()
-              .then((_) => print('[REGISTER] User deleted from Firebase Auth'))
+              .then(
+                (_) => print('[REGISTER] Pengguna dihapus dari Firebase Auth'),
+              )
               .catchError(
-                (e) =>
-                    print('[REGISTER] Error deleting from Firebase Auth: $e'),
+                (e) => print(
+                  '[REGISTER] Kesalahan saat menghapus dari Firebase Auth: $e',
+                ),
               );
         }
       }
     } catch (e) {
-      print('[REGISTER] Error during user cleanup: $e');
+      print('[REGISTER] Kesalahan selama pembersihan pengguna: $e');
     } finally {
-      // Always sign out regardless of deletion success
+      // Selalu sign out terlepas dari keberhasilan penghapusan
       try {
         await FirebaseAuth.instance.signOut();
       } catch (e) {
-        print('[REGISTER] Error during sign out after cleanup: $e');
+        print('[REGISTER] Kesalahan selama sign out setelah pembersihan: $e');
       }
       await _navigateBackToLogin(context);
     }
@@ -251,11 +257,11 @@ class _RegisterPageState extends State<RegisterPage> {
 
   // MAIN REGISTRATION FLOW
 
-  /// Handles the complete registration process
+  /// Menangani proses pendaftaran secara lengkap
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
-    print('[REGISTER] Starting registration process');
+    print('[REGISTER] Memulai proses pendaftaran');
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -263,7 +269,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
     UserCredential? credential;
     try {
-      // Check if email is already registered
+      // Periksa apakah email sudah terdaftar
       final String email = _emailController.text.trim();
       final String password = _passwordController.text.trim();
       final String nama = _namaController.text.trim();
@@ -281,12 +287,12 @@ class _RegisterPageState extends State<RegisterPage> {
           return;
         }
       } catch (e) {
-        print('[REGISTER] Error checking email: $e');
-        // Continue despite email check error
+        print('[REGISTER] Kesalahan memeriksa email: $e');
+        // Lanjutkan meskipun ada kesalahan pengecekan email
       }
 
-      // Create user account
-      print('[REGISTER] Creating user account');
+      // Buat akun pengguna
+      print('[REGISTER] Membuat akun pengguna');
       credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
@@ -297,23 +303,23 @@ class _RegisterPageState extends State<RegisterPage> {
       }
 
       final String uid = credential.user!.uid;
-      print('[REGISTER] User created with UID: $uid');
+      print('[REGISTER] Pengguna dibuat dengan UID: $uid');
 
-      // Small delay to prevent race conditions
+      // Penundaan kecil untuk mencegah kondisi race
       await Future.delayed(const Duration(milliseconds: 300));
 
-      // Update display name
+      // Perbarui nama tampilan
       try {
         if (FirebaseAuth.instance.currentUser != null) {
           await credential.user?.updateDisplayName(nama);
-          print('[REGISTER] Display name updated');
+          print('[REGISTER] Nama tampilan diperbarui');
         }
       } catch (e) {
-        print('[REGISTER] Error updating display name: $e');
-        // Continue despite display name update error
+        print('[REGISTER] Kesalahan memperbarui nama tampilan: $e');
+        // Lanjutkan meskipun ada kesalahan pembaruan nama tampilan
       }
 
-      // Save user data to Firestore
+      // Simpan data pengguna ke Firestore
       try {
         final userData = {
           'nama': nama,
@@ -334,26 +340,32 @@ class _RegisterPageState extends State<RegisterPage> {
             .collection('users')
             .doc(uid)
             .set(userData);
-        print('[REGISTER] User data saved to Firestore');
+        print('[REGISTER] Data pengguna disimpan ke Firestore');
 
-        // Save username to SharedPreferences
+        // Simpan nama pengguna ke SharedPreferences
         try {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('userName', nama);
-          print('[REGISTER] User name saved to SharedPreferences: $nama');
+          print(
+            '[REGISTER] Nama pengguna disimpan ke SharedPreferences: $nama',
+          );
         } catch (e) {
-          print('[REGISTER] Error saving user name to SharedPreferences: $e');
-          // Continue despite SharedPreferences error
+          print(
+            '[REGISTER] Kesalahan menyimpan nama pengguna ke SharedPreferences: $e',
+          );
+          // Lanjutkan meskipun ada kesalahan SharedPreferences
         }
 
-        // Wait for cloud function to handle email verification
+        // Tunggu cloud function untuk menangani verifikasi email
         await Future.delayed(const Duration(seconds: 1));
 
         if (context.mounted) {
           _showVerificationDialog(context, email);
         }
       } catch (firestoreError) {
-        print('[REGISTER] Error saving data to Firestore: $firestoreError');
+        print(
+          '[REGISTER] Kesalahan menyimpan data ke Firestore: $firestoreError',
+        );
         throw firestoreError;
       }
     } on FirebaseAuthException catch (e) {
@@ -384,9 +396,9 @@ class _RegisterPageState extends State<RegisterPage> {
         _errorMessage = errorMessage;
       });
     } catch (e) {
-      print('[REGISTER] General error: $e');
+      print('[REGISTER] Kesalahan umum: $e');
 
-      // Handle partially created accounts
+      // Handle akun yang dibuat sebagian
       if (credential != null && credential.user != null) {
         final String errorUid = credential.user!.uid;
         final String email = _emailController.text.trim();
@@ -394,7 +406,7 @@ class _RegisterPageState extends State<RegisterPage> {
         if (context.mounted) {
           _showErrorRegistrationDialog(context, email, errorUid);
         } else {
-          // If context is not mounted, still try to clean up
+          // Jika context tidak dimounted, masih coba untuk membersihkan
           try {
             await FirebaseFirestore.instance
                 .collection('users')
@@ -402,11 +414,11 @@ class _RegisterPageState extends State<RegisterPage> {
                 .delete();
             await FirebaseAuth.instance.signOut();
           } catch (cleanupError) {
-            print('[REGISTER] Error during cleanup: $cleanupError');
+            print('[REGISTER] Kesalahan selama pembersihan: $cleanupError');
           }
         }
       } else {
-        // Show general error message
+        // Tampilkan pesan kesalahan umum
         setState(() {
           _errorMessage =
               'Terjadi kesalahan saat mendaftar. Silakan coba lagi.';
@@ -554,9 +566,9 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  // UI COMPONENTS
+  // KOMPONEN UI
 
-  /// Create a styled text field with consistent appearance
+  /// Membuat field teks dengan tampilan yang konsisten
   Widget _buildTextField({
     required TextEditingController controller,
     required String labelText,
@@ -592,7 +604,7 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  /// Create a styled error message container
+  /// Membuat container pesan kesalahan dengan tampilan yang sesuai
   Widget _buildErrorMessage() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
