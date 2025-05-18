@@ -22,11 +22,12 @@ Finblood adalah aplikasi mobile untuk memudahkan pencarian dan pendaftaran pendo
 
 ## Screenshot
 
-<div align="center" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; max-width: 650px; margin: auto;">
+<div align="center"
   <img src="assets/images/ss1.png" alt="Login Screen" width="150">
   &nbsp;&nbsp;&nbsp;
   <img src="assets/images/ss2.png" alt="Home Screen" width="150">
   &nbsp;&nbsp;&nbsp;
+  <br>
   <img src="assets/images/ss3.png" alt="Donor Register Screen" width="150">
   &nbsp;&nbsp;&nbsp;
   <img src="assets/images/ss4.png" alt="Donor List Screen" width="150">
