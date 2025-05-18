@@ -22,7 +22,7 @@ Finblood adalah aplikasi mobile untuk memudahkan pencarian dan pendaftaran pendo
 
 ## Screenshot
 
-<p align="center">
+<div align="center" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; max-width: 650px; margin: auto;">
   <img src="assets/images/ss1.png" alt="Login Screen" width="150">
   &nbsp;&nbsp;&nbsp;
   <img src="assets/images/ss2.png" alt="Home Screen" width="150">
@@ -60,14 +60,7 @@ Finblood adalah aplikasi mobile untuk memudahkan pencarian dan pendaftaran pendo
    flutter pub get
    ```
 
-3. Konfigurasikan Firebase
-   - Buat proyek di [Firebase Console](https://console.firebase.google.com/)
-   - Tambahkan aplikasi Android/iOS ke proyek Firebase
-   - Unduh file konfigurasi dan letakkan di tempat yang sesuai
-   - Aktifkan Authentication (Email/Password)
-   - Siapkan Cloud Firestore
-
-4. Jalankan aplikasi
+3. Jalankan aplikasi
    ```bash
    flutter run
    ```
