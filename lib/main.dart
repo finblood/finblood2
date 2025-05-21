@@ -10,6 +10,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'onboarding.dart';
+import 'package:dropdown_button2/dropdown_button2.dart';
 
 Future<void> main() async {
   // Menangkap semua error yang tidak tertangani
@@ -967,6 +968,7 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
         backgroundColor: const Color(0xFF6C1022),
         centerTitle: true,
         elevation: 4,
+        iconTheme: const IconThemeData(color: Colors.white),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.only(
             bottomLeft: Radius.circular(20),
@@ -993,7 +995,7 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  DropdownButtonFormField<String>(
+                  DropdownButtonFormField2<String>(
                     value: _filterKampus,
                     isExpanded: true,
                     style: const TextStyle(
@@ -1070,9 +1072,18 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
                       ),
                       errorStyle: const TextStyle(color: Colors.red),
                     ),
+                    dropdownStyleData: DropdownStyleData(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      maxHeight: 500,
+                    ),
+                    menuItemStyleData: const MenuItemStyleData(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
+                  DropdownButtonFormField2<String>(
                     value: _filterGolongan,
                     isExpanded: true,
                     style: const TextStyle(
@@ -1148,6 +1159,15 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
                         ),
                       ),
                       errorStyle: const TextStyle(color: Colors.red),
+                    ),
+                    dropdownStyleData: DropdownStyleData(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      maxHeight: 300,
+                    ),
+                    menuItemStyleData: const MenuItemStyleData(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -1439,6 +1459,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
         backgroundColor: const Color(0xFF6C1022),
         centerTitle: true,
         elevation: 4,
+        iconTheme: const IconThemeData(color: Colors.white),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.only(
             bottomLeft: Radius.circular(20),
@@ -1599,7 +1620,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    DropdownButtonFormField<String>(
+                    DropdownButtonFormField2<String>(
                       value: _selectedKampus,
                       items:
                           kampusList
@@ -1657,13 +1678,22 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                         ),
                         errorStyle: const TextStyle(color: Colors.red),
                       ),
+                      validator:
+                          (value) =>
+                              value == null ? 'Kampus wajib dipilih' : null,
+                      dropdownStyleData: DropdownStyleData(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        maxHeight: 400,
+                      ),
+                      menuItemStyleData: const MenuItemStyleData(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                      ),
                       style: const TextStyle(
                         color: Color(0xFF6C1022),
                         fontFamily: 'Poppins',
                       ),
-                      validator:
-                          (value) =>
-                              value == null ? 'Kampus wajib dipilih' : null,
                     ),
                     const SizedBox(height: 4),
                     const Text(
@@ -1675,7 +1705,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    DropdownButtonFormField<String>(
+                    DropdownButtonFormField2<String>(
                       value: _selectedGolongan,
                       items:
                           golonganList
@@ -1734,15 +1764,24 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                         ),
                         errorStyle: const TextStyle(color: Colors.red),
                       ),
-                      style: const TextStyle(
-                        color: Color(0xFF6C1022),
-                        fontFamily: 'Poppins',
-                      ),
                       validator:
                           (value) =>
                               value == null
                                   ? 'Golongan darah wajib dipilih'
                                   : null,
+                      dropdownStyleData: DropdownStyleData(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        maxHeight: 300,
+                      ),
+                      menuItemStyleData: const MenuItemStyleData(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                      style: const TextStyle(
+                        color: Color(0xFF6C1022),
+                        fontFamily: 'Poppins',
+                      ),
                     ),
                     const SizedBox(height: 36),
                     Center(
