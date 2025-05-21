@@ -50,7 +50,7 @@ exports.sendVerificationEmailV2 = onDocumentCreated('users/{userId}', async (eve
                 <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;padding:30px;border-radius:10px;">
                   <tr>
                     <td align="center" style="padding-bottom:20px;">
-                      <img src="https://i.imgur.com/qrTvSdE.png" alt="Logo" width="150" style="margin-bottom:20px;" />
+                      <img src="https://i.imgur.com/HUuWVrW.png" alt="Logo" width="150" style="margin-bottom:20px;" />
                       <h2 style="color:#6C1022;margin:0;">Verifikasi Email Anda</h2>
                     </td>
                   </tr>
@@ -166,7 +166,7 @@ exports.resendVerificationEmail = onDocumentUpdated('users/{userId}', async (eve
                   <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;padding:30px;border-radius:10px;">
                     <tr>
                       <td align="center" style="padding-bottom:20px;">
-                        <img src="https://i.imgur.com/qrTvSdE.png" alt="Logo" width="150" style="margin-bottom:20px;" />
+                        <img src="https://i.imgur.com/HUuWVrW.png" alt="Logo" width="150" style="margin-bottom:20px;" />
                         <h2 style="color:#6C1022;margin:0;">Verifikasi Email Anda</h2>
                       </td>
                     </tr>
