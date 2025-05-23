@@ -141,7 +141,10 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.all(Radius.circular(50)),
-                          borderSide: BorderSide(color: Color(0xFF6C1022)),
+                          borderSide: BorderSide(
+                            color: Color(0xFF6C1022),
+                            width: 1.5,
+                          ),
                         ),
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: 20,
@@ -152,7 +155,7 @@ class _LoginPageState extends State<LoginPage> {
                           borderRadius: BorderRadius.all(Radius.circular(50)),
                           borderSide: BorderSide(
                             color: Color(0xFF6C1022),
-                            width: 2,
+                            width: 2.5,
                           ),
                         ),
                       ),
@@ -508,7 +511,10 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.all(Radius.circular(50)),
-                      borderSide: BorderSide(color: Color(0xFF6C1022)),
+                      borderSide: BorderSide(
+                        color: Color(0xFF6C1022),
+                        width: 1.5,
+                      ),
                     ),
                     contentPadding: EdgeInsets.symmetric(
                       horizontal: 20,
@@ -519,7 +525,7 @@ class _LoginPageState extends State<LoginPage> {
                       borderRadius: BorderRadius.all(Radius.circular(50)),
                       borderSide: BorderSide(
                         color: Color(0xFF6C1022),
-                        width: 2,
+                        width: 2.5,
                       ),
                     ),
                   ),
@@ -545,7 +551,10 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.all(Radius.circular(50)),
-                      borderSide: BorderSide(color: Color(0xFF6C1022)),
+                      borderSide: BorderSide(
+                        color: Color(0xFF6C1022),
+                        width: 1.5,
+                      ),
                     ),
                     contentPadding: EdgeInsets.symmetric(
                       horizontal: 20,
@@ -556,7 +565,7 @@ class _LoginPageState extends State<LoginPage> {
                       borderRadius: BorderRadius.all(Radius.circular(50)),
                       borderSide: BorderSide(
                         color: Color(0xFF6C1022),
-                        width: 2,
+                        width: 2.5,
                       ),
                     ),
                   ),

@@ -11,6 +11,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'onboarding.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
+import 'dart:convert'; // For jsonEncode and jsonDecode
+import 'package:cached_network_image/cached_network_image.dart'; // Added for CachedNetworkImage
+import 'package:flutter_cache_manager/flutter_cache_manager.dart'; // Added for DefaultCacheManager
 
 Future<void> main() async {
   // Menangkap semua error yang tidak tertangani
@@ -744,16 +747,203 @@ class CarouselSection extends StatefulWidget {
 class _CarouselSectionState extends State<CarouselSection> {
   int _current = 0;
   List<Map<String, dynamic>> _carouselItems = [];
-  bool _isLoading = true;
+  bool _isLoading =
+      true; // Initially true until cache or Firestore load finishes
   String? _error;
+  Timestamp? _localLastUpdated; // To store the timestamp of the cached data
+
+  static const String _carouselCacheKey = 'carousel_data_cache';
+  static const String _carouselTimestampKey = 'carousel_timestamp_cache';
 
   @override
   void initState() {
     super.initState();
-    _fetchCarouselImages();
+    _loadCarouselData();
   }
 
-  Future<void> _fetchCarouselImages() async {
+  Future<void> _loadCarouselData() async {
+    await _loadCarouselFromPrefs(); // Try to load from cache first
+    _checkForCarouselUpdates(); // Then check Firestore for updates
+  }
+
+  Future<void> _loadCarouselFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? cachedDataJson = prefs.getString(_carouselCacheKey);
+      final int? cachedTimestampMillis = prefs.getInt(_carouselTimestampKey);
+
+      if (cachedDataJson != null && cachedTimestampMillis != null) {
+        final List<dynamic> decodedList = jsonDecode(cachedDataJson);
+        final List<Map<String, dynamic>> cachedItems =
+            decodedList.map((item) => item as Map<String, dynamic>).toList();
+
+        if (mounted) {
+          setState(() {
+            _carouselItems = cachedItems;
+            _localLastUpdated = Timestamp(
+              cachedTimestampMillis ~/ 1000,
+              (cachedTimestampMillis % 1000) * 1000000,
+            );
+            _isLoading =
+                false; // Loaded from cache, no longer "initial" loading
+            if (_carouselItems.isNotEmpty) {
+              _initiateImageDownloads(_carouselItems);
+            }
+          });
+          print("Carousel data loaded from cache.");
+        }
+      } else {
+        print("No carousel data found in cache.");
+        if (mounted) {
+          setState(() {
+            _isLoading = true;
+          });
+        }
+        // If no cache, ensure isLoading remains true or is set true if called separately
+        if (mounted && _carouselItems.isEmpty) {
+          // only set isLoading if we truly have nothing
+          setState(() {
+            _isLoading = true;
+          });
+        }
+      }
+    } catch (e) {
+      print("Error loading carousel from prefs: $e");
+      // If cache loading fails, proceed to fetch from Firestore
+      if (mounted && _carouselItems.isEmpty) {
+        setState(() {
+          _isLoading = true;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveCarouselToPrefs(
+    List<Map<String, dynamic>> items,
+    Timestamp firestoreTimestamp,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String jsonString = jsonEncode(items);
+      await prefs.setString(_carouselCacheKey, jsonString);
+      await prefs.setInt(
+        _carouselTimestampKey,
+        firestoreTimestamp.millisecondsSinceEpoch,
+      );
+      print("Carousel data saved to cache.");
+      if (mounted) {
+        setState(() {
+          _localLastUpdated = firestoreTimestamp;
+        });
+      }
+    } catch (e) {
+      print("Error saving carousel to prefs: $e");
+    }
+  }
+
+  Future<void> _checkForCarouselUpdates() async {
+    try {
+      // Fetch the lastUpdated timestamp from Firestore metadata
+      print(
+        "[FIRESTORE CHECK] Current _localLastUpdated (from cache): $_localLastUpdated",
+      );
+
+      final metadataDoc =
+          await FirebaseFirestore.instance
+              .collection('carousel_metadata')
+              .doc('version_info')
+              .get();
+
+      Timestamp? firestoreLastUpdated;
+      if (metadataDoc.exists &&
+          metadataDoc.data() != null &&
+          metadataDoc.data()!.containsKey('lastUpdated')) {
+        firestoreLastUpdated = metadataDoc.data()!['lastUpdated'] as Timestamp?;
+      }
+
+      print(
+        "[FIRESTORE CHECK] Fetched firestoreLastUpdated: $firestoreLastUpdated",
+      );
+
+      if (firestoreLastUpdated == null) {
+        print(
+          "[FIRESTORE CHECK] Carousel version_info document or lastUpdated field not found in Firestore.",
+        );
+        // If no version info, and no cache, show error or handle as "no data"
+        if (_carouselItems.isEmpty && mounted) {
+          setState(() {
+            _error = 'Carousel configuration missing.';
+            _isLoading = false;
+          });
+        } else if (mounted) {
+          // If we have cached items, we'll just use them.
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      bool needsUpdate =
+          _localLastUpdated == null ||
+          firestoreLastUpdated.compareTo(_localLastUpdated!) > 0;
+
+      print("[FIRESTORE CHECK] Does it need update? $needsUpdate");
+      if (_localLastUpdated == null) {
+        print("[FIRESTORE CHECK] Reason: Local cache timestamp is null.");
+      } else if (firestoreLastUpdated.compareTo(_localLastUpdated!) > 0) {
+        print(
+          "[FIRESTORE CHECK] Reason: Firestore timestamp (${firestoreLastUpdated.toDate()}) is newer than local cache (${_localLastUpdated!.toDate()}).",
+        );
+      } else {
+        print(
+          "[FIRESTORE CHECK] Reason: Local cache timestamp (${_localLastUpdated!.toDate()}) is current or newer than Firestore (${firestoreLastUpdated.toDate()}).",
+        );
+      }
+
+      if (needsUpdate) {
+        print(
+          "[FIRESTORE CHECK] Carousel update found or no local cache. Fetching from Firestore...",
+        );
+        await _fetchCarouselImagesFromFirestore(firestoreLastUpdated);
+      } else {
+        print(
+          "[FIRESTORE CHECK] Carousel data is up to date (from cache or confirmed with Firestore).",
+        );
+        if (mounted) {
+          setState(() {
+            _isLoading = false; // Data is up-to-date, stop loading
+            if (_carouselItems.isEmpty && _error == null) {
+              // If cache was empty but firestore says up-to-date
+              _error =
+                  'No images found.'; // This implies Firestore has no items either
+            }
+          });
+        }
+      }
+    } catch (e) {
+      print("Error checking for carousel updates: $e");
+      if (mounted) {
+        setState(() {
+          // If an error occurs, and we don't have cached items, show error.
+          // Otherwise, rely on potentially stale cache.
+          if (_carouselItems.isEmpty) {
+            _error = 'Failed to check for updates.';
+          }
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchCarouselImagesFromFirestore(
+    Timestamp newFirestoreTimestamp,
+  ) async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true; // Explicitly set loading true when fetching
+      });
+    }
     try {
       final snapshot =
           await FirebaseFirestore.instance
@@ -761,8 +951,9 @@ class _CarouselSectionState extends State<CarouselSection> {
               .orderBy('order')
               .get();
 
+      List<Map<String, dynamic>> fetchedItems = [];
       if (snapshot.docs.isNotEmpty) {
-        final items =
+        fetchedItems =
             snapshot.docs
                 .map((doc) {
                   final data = doc.data();
@@ -773,53 +964,69 @@ class _CarouselSectionState extends State<CarouselSection> {
                   };
                 })
                 .where((item) => item['url'] != null && item['url']!.isNotEmpty)
-                .toList();
+                .toList()
+                .cast<Map<String, dynamic>>();
+      }
 
-        if (mounted) {
-          final castedItems = items.cast<Map<String, dynamic>>();
-          setState(() {
-            _carouselItems = castedItems;
-            _isLoading = false;
-            _error = null;
-          });
-
-          // Precache images after state is updated
-          if (mounted && castedItems.isNotEmpty) {
-            for (var itemData in castedItems) {
-              final String? imageUrl = itemData['url'];
-              if (imageUrl != null && imageUrl.isNotEmpty) {
-                precacheImage(NetworkImage(imageUrl), context)
-                    .then((_) {
-                      // Optional: You can log success or handle completion if needed
-                      print("Successfully pre-cached image: $imageUrl");
-                    })
-                    .catchError((e, s) {
-                      // Optional: Handle or log pre-caching errors
-                      print("Error pre-caching image $imageUrl: $e");
-                    });
-              }
-            }
-          }
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _error = 'No images found.';
-            _carouselItems = [];
-          });
+      if (mounted) {
+        setState(() {
+          _carouselItems = fetchedItems;
+          _error = fetchedItems.isEmpty ? 'No images found.' : null;
+          _isLoading = false;
+        });
+        await _saveCarouselToPrefs(fetchedItems, newFirestoreTimestamp);
+        if (fetchedItems.isNotEmpty) {
+          _initiateImageDownloads(fetchedItems);
         }
       }
     } catch (e) {
-      print('Error fetching carousel images: $e');
+      print('Error fetching carousel images from Firestore: $e');
       if (mounted) {
         setState(() {
+          if (_carouselItems.isEmpty) {
+            // Only set error if we couldn't fall back to cache
+            _error = 'Failed to load images.';
+          }
           _isLoading = false;
-          _error = 'Failed to load images.';
-          _carouselItems = [];
         });
       }
     }
+  }
+
+  // New method to initiate downloads using DefaultCacheManager
+  Future<void> _initiateImageDownloads(
+    List<Map<String, dynamic>> itemsToDownload,
+  ) async {
+    if (!mounted || itemsToDownload.isEmpty) return;
+
+    print(
+      "[CacheManager] Initiating background downloads for ${_carouselItems.length} images.",
+    );
+    List<Future<void>> downloadFutures = [];
+
+    for (var itemData in itemsToDownload) {
+      final String? imageUrl = itemData['url'];
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        // Using try-catch for individual downloads to prevent one failure from stopping others
+        downloadFutures.add(
+          DefaultCacheManager()
+              .downloadFile(imageUrl)
+              .then((_) {
+                print(
+                  "[CacheManager] Successfully initiated download (or file exists) for: $imageUrl",
+                );
+              })
+              .catchError((e, s) {
+                print(
+                  "[CacheManager] Error initiating download for $imageUrl: $e",
+                );
+              }),
+        );
+      }
+    }
+    // We can wait for all to complete if we want, but not strictly necessary for just starting them
+    // await Future.wait(downloadFutures);
+    // print("[CacheManager] All image download initiations complete.");
   }
 
   Future<void> _handleCarouselTap(Map<String, dynamic> item) async {
@@ -868,7 +1075,7 @@ class _CarouselSectionState extends State<CarouselSection> {
     if (_isLoading) {
       return Container(
         width: 352,
-        height: 155,
+        height: 155, // Reverted height, was 180 for debug text
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           color: Colors.grey[200],
@@ -906,111 +1113,98 @@ class _CarouselSectionState extends State<CarouselSection> {
           ),
         ),
       );
-    }
-
-    return Column(
-      children: [
-        Container(
-          width: 352,
-          height: 155,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.25),
-                blurRadius: 10,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: CarouselSlider(
-              items:
-                  _carouselItems
-                      .map(
-                        (item) => GestureDetector(
-                          onTap: () => _handleCarouselTap(item),
-                          child: Image.network(
-                            item['url']! as String,
-                            fit: BoxFit.cover,
-                            width: 352,
-                            height: 155,
-                            loadingBuilder: (
-                              BuildContext context,
-                              Widget child,
-                              ImageChunkEvent? loadingProgress,
-                            ) {
-                              if (loadingProgress == null) return child;
-                              return Center(
-                                child: CircularProgressIndicator(
-                                  value:
-                                      loadingProgress.expectedTotalBytes != null
-                                          ? loadingProgress
-                                                  .cumulativeBytesLoaded /
-                                              loadingProgress
-                                                  .expectedTotalBytes!
-                                          : null,
-                                ),
-                              );
-                            },
-                            errorBuilder: (
-                              BuildContext context,
-                              Object exception,
-                              StackTrace? stackTrace,
-                            ) {
-                              print('Error loading image: $exception');
-                              return Container(
-                                width: 352,
-                                height: 155,
-                                color: Colors.grey[200],
-                                child: Center(
-                                  child: Icon(
-                                    Icons.error_outline,
-                                    color: Colors.red[400],
-                                    size: 40,
+    } else {
+      return Column(
+        children: [
+          Container(
+            width: 352,
+            height: 155,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.25),
+                  blurRadius: 10,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: CarouselSlider(
+                items:
+                    _carouselItems
+                        .map(
+                          (item) => GestureDetector(
+                            onTap: () => _handleCarouselTap(item),
+                            child: CachedNetworkImage(
+                              imageUrl: item['url']! as String,
+                              fit: BoxFit.cover,
+                              width: 352,
+                              height: 155,
+                              fadeInDuration: const Duration(milliseconds: 300),
+                              placeholder:
+                                  (context, url) => Container(
+                                    width: 352,
+                                    height: 155,
+                                    color: Colors.grey[200],
                                   ),
-                                ),
-                              );
-                            },
+                              errorWidget: (context, url, error) {
+                                print(
+                                  'Error loading image with CachedNetworkImage: $url, error: $error',
+                                );
+                                return Container(
+                                  width: 352,
+                                  height: 155,
+                                  color: Colors.grey[300],
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.error_outline,
+                                      color: Colors.red[400],
+                                      size: 40,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                      )
-                      .toList(),
-              options: CarouselOptions(
-                height: 155,
-                viewportFraction: 1.0,
-                enlargeCenterPage: false,
-                onPageChanged: (index, reason) {
-                  setState(() {
-                    _current = index;
-                  });
-                },
+                        )
+                        .toList(),
+                options: CarouselOptions(
+                  height: 155,
+                  viewportFraction: 1.0,
+                  enlargeCenterPage: false,
+                  onPageChanged: (index, reason) {
+                    setState(() {
+                      _current = index;
+                    });
+                  },
+                ),
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children:
-              _carouselItems.asMap().entries.map((entry) {
-                return Container(
-                  width: 12.0,
-                  height: 12.0,
-                  margin: const EdgeInsets.symmetric(horizontal: 5.0),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color:
-                        _current == entry.key
-                            ? const Color(0xFF6C1022)
-                            : Colors.grey[300],
-                  ),
-                );
-              }).toList(),
-        ),
-      ],
-    );
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children:
+                _carouselItems.asMap().entries.map((entry) {
+                  return Container(
+                    width: 12.0,
+                    height: 12.0,
+                    margin: const EdgeInsets.symmetric(horizontal: 5.0),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color:
+                          _current == entry.key
+                              ? const Color(0xFF6C1022)
+                              : Colors.grey[300],
+                    ),
+                  );
+                }).toList(),
+          ),
+        ],
+      );
+    }
   }
 }
 
@@ -1284,6 +1478,14 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
                         borderRadius: BorderRadius.circular(15),
                       ),
                       maxHeight: 500,
+                      scrollbarTheme: ScrollbarThemeData(
+                        thumbVisibility: MaterialStateProperty.all(true),
+                        thickness: MaterialStateProperty.all(6),
+                        radius: const Radius.circular(8),
+                        thumbColor: MaterialStateProperty.all(
+                          const Color(0xFF6C1022),
+                        ),
+                      ),
                     ),
                     menuItemStyleData: const MenuItemStyleData(
                       padding: EdgeInsets.symmetric(horizontal: 16),
@@ -1371,7 +1573,6 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(15),
                       ),
-                      maxHeight: 300,
                     ),
                     menuItemStyleData: const MenuItemStyleData(
                       padding: EdgeInsets.symmetric(horizontal: 16),
@@ -1585,6 +1786,11 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
   String? _selectedKampus;
   String? _selectedGolongan;
 
+  // State untuk melacak status pendaftaran pendonor
+  bool _isLoading = true;
+  Map<String, dynamic>? _existingDonorData;
+  String? _existingDonorId;
+
   final List<String> kampusList = [
     'Universitas Udayana',
     'Universitas Pendidikan Ganesha',
@@ -1610,6 +1816,118 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
   final List<String> golonganList = ['A', 'B', 'O', 'AB'];
 
   @override
+  void initState() {
+    super.initState();
+    _checkExistingDonor();
+  }
+
+  Future<void> _checkExistingDonor() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('pendonor')
+              .where('user_id', isEqualTo: user.uid)
+              .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        final doc = snapshot.docs.first;
+        setState(() {
+          _existingDonorData = doc.data();
+          _existingDonorId = doc.id;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error checking existing donor: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _deleteDonor() async {
+    // Tampilkan dialog konfirmasi
+    final bool? confirmDelete = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Center(
+              child: Text(
+                'Konfirmasi Hapus',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6C1022),
+                  fontSize: 20,
+                ),
+              ),
+            ),
+            content: const Text(
+              'Apakah Anda yakin ingin menghapus data pendonor Anda?',
+              textAlign: TextAlign.left,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text(
+                  'Batal',
+                  style: TextStyle(color: Color(0xFF6C1022)),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text(
+                  'Hapus',
+                  style: TextStyle(
+                    color: Color(0xFF6C1022),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmDelete == true && _existingDonorId != null) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('pendonor')
+            .doc(_existingDonorId)
+            .delete();
+
+        setState(() {
+          _existingDonorData = null;
+          _existingDonorId = null;
+        });
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Data pendonor berhasil dihapus!')),
+          );
+        }
+      } catch (e) {
+        print('Error deleting donor: $e');
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Gagal menghapus data: $e')));
+        }
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _namaController.dispose();
     _hpController.dispose();
@@ -1620,6 +1938,16 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
     if (_formKey.currentState?.validate() != true) return;
 
     try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Pengguna belum login')));
+        }
+        return;
+      }
+
       // Validasi tambahan untuk mencegah nilai null atau kosong
       final nama = _namaController.text.trim();
       final nomorHP = _hpController.text.trim();
@@ -1645,14 +1973,18 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
         'nomor_hp': nomorHP,
         'kampus': kampus,
         'golongan_darah': golonganDarah,
+        'user_id':
+            user.uid, // Tambahkan user_id untuk menghubungkan dengan pengguna
         'timestamp': FieldValue.serverTimestamp(),
       });
+
+      // Refresh data setelah berhasil mendaftar
+      await _checkExistingDonor();
 
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Pendaftaran berhasil!')));
-        Navigator.pop(context);
       }
     } catch (e) {
       print('Error _submitForm: $e');
@@ -1662,6 +1994,443 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
         ).showSnackBar(SnackBar(content: Text('Gagal mendaftar: $e')));
       }
     }
+  }
+
+  Widget _buildDonorDataView() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Anda Sudah Mendaftar',
+            style: TextStyle(
+              color: Color(0xFF6C1022),
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              fontFamily: 'Poppins',
+            ),
+          ),
+          const SizedBox(height: 7),
+          Card(
+            margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [Color(0xFF6C1022), Color(0xFFD21F42)],
+                ),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Nama Lengkap',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _existingDonorData?['nama'] ?? '-',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.normal,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Nomor HP',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _existingDonorData?['nomor_hp'] ?? '-',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.normal,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Kampus',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _existingDonorData?['kampus'] ?? '-',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.normal,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Golongan Darah',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _existingDonorData?['golongan_darah'] ?? '-',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.normal,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Center(
+            child: SizedBox(
+              width: 183,
+              height: 51,
+              child: ElevatedButton(
+                onPressed: _deleteDonor,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6C1022),
+                  foregroundColor: Colors.white,
+                  textStyle: const TextStyle(
+                    fontSize: 18,
+                    fontFamily: 'Poppins',
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(50),
+                  ),
+                ),
+                child: const Text(
+                  'HAPUS',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Poppins',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRegistrationForm() {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Nama Lengkap',
+              style: TextStyle(
+                color: Color(0xFF6C1022),
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 4),
+            TextFormField(
+              controller: _namaController,
+              decoration: InputDecoration(
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF6C1022),
+                    width: 2.0,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF6C1022),
+                    width: 2.5,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(color: Colors.red, width: 2.0),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(color: Colors.red, width: 2.5),
+                ),
+                errorStyle: const TextStyle(color: Colors.red),
+              ),
+              validator:
+                  (value) =>
+                      value == null || value.trim().isEmpty
+                          ? 'Nama wajib diisi'
+                          : null,
+              style: const TextStyle(
+                color: Color(0xFF6C1022),
+                fontFamily: 'Poppins',
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Nomor HP',
+              style: TextStyle(
+                color: Color(0xFF6C1022),
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 4),
+            TextFormField(
+              controller: _hpController,
+              decoration: InputDecoration(
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF6C1022),
+                    width: 2.0,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF6C1022),
+                    width: 2.5,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(color: Colors.red, width: 2.0),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(color: Colors.red, width: 2.5),
+                ),
+                errorStyle: const TextStyle(color: Colors.red),
+              ),
+              validator:
+                  (value) =>
+                      value == null || value.trim().isEmpty
+                          ? 'Nomor HP wajib diisi'
+                          : null,
+              keyboardType: TextInputType.phone,
+              style: const TextStyle(
+                color: Color(0xFF6C1022),
+                fontFamily: 'Poppins',
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Pilih Kampus',
+              style: TextStyle(
+                color: Color(0xFF6C1022),
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 4),
+            DropdownButtonFormField2<String>(
+              value: _selectedKampus,
+              items:
+                  kampusList
+                      .map(
+                        (kampus) => DropdownMenuItem(
+                          value: kampus,
+                          child: Text(
+                            kampus,
+                            style: const TextStyle(
+                              color: Color(0xFF6C1022),
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Poppins',
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+              onChanged: (val) => setState(() => _selectedKampus = val),
+              decoration: InputDecoration(
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF6C1022),
+                    width: 2.0,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF6C1022),
+                    width: 2.5,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(color: Colors.red, width: 2.0),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(color: Colors.red, width: 2.5),
+                ),
+                errorStyle: const TextStyle(color: Colors.red),
+              ),
+              validator:
+                  (value) => value == null ? 'Kampus wajib dipilih' : null,
+              dropdownStyleData: DropdownStyleData(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                maxHeight: 500,
+                scrollbarTheme: ScrollbarThemeData(
+                  thumbVisibility: MaterialStateProperty.all(true),
+                  thickness: MaterialStateProperty.all(6),
+                  radius: const Radius.circular(8),
+                  thumbColor: MaterialStateProperty.all(
+                    const Color(0xFF6C1022),
+                  ),
+                ),
+              ),
+              menuItemStyleData: const MenuItemStyleData(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+              ),
+              style: const TextStyle(
+                color: Color(0xFF6C1022),
+                fontFamily: 'Poppins',
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Pilih Golongan Darah',
+              style: TextStyle(
+                color: Color(0xFF6C1022),
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 4),
+            DropdownButtonFormField2<String>(
+              value: _selectedGolongan,
+              items:
+                  golonganList
+                      .map(
+                        (gol) => DropdownMenuItem(
+                          value: gol,
+                          child: Text(
+                            gol,
+                            style: const TextStyle(
+                              color: Color(0xFF6C1022),
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Poppins',
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+              onChanged: (val) => setState(() => _selectedGolongan = val),
+              decoration: InputDecoration(
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF6C1022),
+                    width: 2.0,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF6C1022),
+                    width: 2.5,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(color: Colors.red, width: 2.0),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: const BorderRadius.all(Radius.circular(15)),
+                  borderSide: const BorderSide(color: Colors.red, width: 2.5),
+                ),
+                errorStyle: const TextStyle(color: Colors.red),
+              ),
+              validator:
+                  (value) =>
+                      value == null ? 'Golongan darah wajib dipilih' : null,
+              dropdownStyleData: DropdownStyleData(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                maxHeight: 300,
+              ),
+              menuItemStyleData: const MenuItemStyleData(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+              ),
+              style: const TextStyle(
+                color: Color(0xFF6C1022),
+                fontFamily: 'Poppins',
+              ),
+            ),
+            const SizedBox(height: 36),
+            Center(
+              child: SizedBox(
+                width: 183,
+                height: 51,
+                child: ElevatedButton(
+                  onPressed: _submitForm,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6C1022),
+                    foregroundColor: Colors.white,
+                    textStyle: const TextStyle(
+                      fontSize: 18,
+                      fontFamily: 'Poppins',
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                  ),
+                  child: const Text(
+                    'DAFTAR',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -1702,340 +2471,16 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Nama Lengkap',
-                      style: TextStyle(
-                        color: Color(0xFF6C1022),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    TextFormField(
-                      controller: _namaController,
-                      decoration: InputDecoration(
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF6C1022),
-                            width: 2.0,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF6C1022),
-                            width: 2.5,
-                          ),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 2.0,
-                          ),
-                        ),
-                        focusedErrorBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 2.5,
-                          ),
-                        ),
-                        errorStyle: const TextStyle(color: Colors.red),
-                      ),
-                      validator:
-                          (value) =>
-                              value == null || value.trim().isEmpty
-                                  ? 'Nama wajib diisi'
-                                  : null,
-                      style: const TextStyle(
-                        color: Color(0xFF6C1022),
-                        fontFamily: 'Poppins',
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Nomor HP',
-                      style: TextStyle(
-                        color: Color(0xFF6C1022),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    TextFormField(
-                      controller: _hpController,
-                      decoration: InputDecoration(
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF6C1022),
-                            width: 2.0,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF6C1022),
-                            width: 2.5,
-                          ),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 2.0,
-                          ),
-                        ),
-                        focusedErrorBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 2.5,
-                          ),
-                        ),
-                        errorStyle: const TextStyle(color: Colors.red),
-                      ),
-                      validator:
-                          (value) =>
-                              value == null || value.trim().isEmpty
-                                  ? 'Nomor HP wajib diisi'
-                                  : null,
-                      keyboardType: TextInputType.phone,
-                      style: const TextStyle(
-                        color: Color(0xFF6C1022),
-                        fontFamily: 'Poppins',
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Pilih Kampus',
-                      style: TextStyle(
-                        color: Color(0xFF6C1022),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    DropdownButtonFormField2<String>(
-                      value: _selectedKampus,
-                      items:
-                          kampusList
-                              .map(
-                                (kampus) => DropdownMenuItem(
-                                  value: kampus,
-                                  child: Text(
-                                    kampus,
-                                    style: const TextStyle(
-                                      color: Color(0xFF6C1022),
-                                      fontWeight: FontWeight.w600,
-                                      fontFamily: 'Poppins',
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                      onChanged: (val) => setState(() => _selectedKampus = val),
-                      decoration: InputDecoration(
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF6C1022),
-                            width: 2.0,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF6C1022),
-                            width: 2.5,
-                          ),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 2.0,
-                          ),
-                        ),
-                        focusedErrorBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 2.5,
-                          ),
-                        ),
-                        errorStyle: const TextStyle(color: Colors.red),
-                      ),
-                      validator:
-                          (value) =>
-                              value == null ? 'Kampus wajib dipilih' : null,
-                      dropdownStyleData: DropdownStyleData(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        maxHeight: 400,
-                      ),
-                      menuItemStyleData: const MenuItemStyleData(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                      ),
-                      style: const TextStyle(
-                        color: Color(0xFF6C1022),
-                        fontFamily: 'Poppins',
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Pilih Golongan Darah',
-                      style: TextStyle(
-                        color: Color(0xFF6C1022),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    DropdownButtonFormField2<String>(
-                      value: _selectedGolongan,
-                      items:
-                          golonganList
-                              .map(
-                                (gol) => DropdownMenuItem(
-                                  value: gol,
-                                  child: Text(
-                                    gol,
-                                    style: const TextStyle(
-                                      color: Color(0xFF6C1022),
-                                      fontWeight: FontWeight.w600,
-                                      fontFamily: 'Poppins',
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                      onChanged:
-                          (val) => setState(() => _selectedGolongan = val),
-                      decoration: InputDecoration(
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF6C1022),
-                            width: 2.0,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF6C1022),
-                            width: 2.5,
-                          ),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 2.0,
-                          ),
-                        ),
-                        focusedErrorBorder: OutlineInputBorder(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(15),
-                          ),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 2.5,
-                          ),
-                        ),
-                        errorStyle: const TextStyle(color: Colors.red),
-                      ),
-                      validator:
-                          (value) =>
-                              value == null
-                                  ? 'Golongan darah wajib dipilih'
-                                  : null,
-                      dropdownStyleData: DropdownStyleData(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        maxHeight: 300,
-                      ),
-                      menuItemStyleData: const MenuItemStyleData(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                      ),
-                      style: const TextStyle(
-                        color: Color(0xFF6C1022),
-                        fontFamily: 'Poppins',
-                      ),
-                    ),
-                    const SizedBox(height: 36),
-                    Center(
-                      child: SizedBox(
-                        width: 183,
-                        height: 51,
-                        child: ElevatedButton(
-                          onPressed: _submitForm,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF6C1022),
-                            foregroundColor: Colors.white,
-                            textStyle: const TextStyle(
-                              fontSize: 18,
-                              fontFamily: 'Poppins',
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(50),
-                            ),
-                          ),
-                          child: const Text(
-                            'DAFTAR',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'Poppins',
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            // Tampilkan loading, data pendonor, atau form pendaftaran
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.all(50.0),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_existingDonorData != null)
+              _buildDonorDataView()
+            else
+              _buildRegistrationForm(),
           ],
         ),
       ),

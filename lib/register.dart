@@ -586,7 +586,7 @@ class _RegisterPageState extends State<RegisterPage> {
         ),
         enabledBorder: const OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(50)),
-          borderSide: BorderSide(color: Color(0xFF6C1022)),
+          borderSide: BorderSide(color: Color(0xFF6C1022), width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 20,
@@ -595,7 +595,7 @@ class _RegisterPageState extends State<RegisterPage> {
         labelStyle: const TextStyle(color: Color(0xFF6B6B6B)),
         focusedBorder: const OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(50)),
-          borderSide: BorderSide(color: Color(0xFF6C1022), width: 2),
+          borderSide: BorderSide(color: Color(0xFF6C1022), width: 2.5),
         ),
       ),
       keyboardType: keyboardType,
