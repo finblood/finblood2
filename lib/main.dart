@@ -352,12 +352,6 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<String> imgList = [
-      'assets/images/slides1.png',
-      'assets/images/slides2.png',
-      'assets/images/slides3.png',
-    ];
-
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -637,7 +631,7 @@ class HomePage extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           // Bagian carousel yang tidak dapat di-scroll
-          CarouselSection(imgList: imgList),
+          const CarouselSection(),
           const SizedBox(height: 10),
 
           // Header bagian ranking kampus
@@ -741,8 +735,7 @@ class HomePage extends StatelessWidget {
 }
 
 class CarouselSection extends StatefulWidget {
-  final List<String> imgList;
-  const CarouselSection({super.key, required this.imgList});
+  const CarouselSection({super.key});
 
   @override
   State<CarouselSection> createState() => _CarouselSectionState();
@@ -750,9 +743,171 @@ class CarouselSection extends StatefulWidget {
 
 class _CarouselSectionState extends State<CarouselSection> {
   int _current = 0;
+  List<Map<String, dynamic>> _carouselItems = [];
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCarouselImages();
+  }
+
+  Future<void> _fetchCarouselImages() async {
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('carousel_images')
+              .orderBy('order')
+              .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        final items =
+            snapshot.docs
+                .map((doc) {
+                  final data = doc.data();
+                  return {
+                    'url': data['url'] as String?,
+                    'actionType': data['actionType'] as String?,
+                    'actionValue': data['actionValue'] as String?,
+                  };
+                })
+                .where((item) => item['url'] != null && item['url']!.isNotEmpty)
+                .toList();
+
+        if (mounted) {
+          final castedItems = items.cast<Map<String, dynamic>>();
+          setState(() {
+            _carouselItems = castedItems;
+            _isLoading = false;
+            _error = null;
+          });
+
+          // Precache images after state is updated
+          if (mounted && castedItems.isNotEmpty) {
+            for (var itemData in castedItems) {
+              final String? imageUrl = itemData['url'];
+              if (imageUrl != null && imageUrl.isNotEmpty) {
+                precacheImage(NetworkImage(imageUrl), context)
+                    .then((_) {
+                      // Optional: You can log success or handle completion if needed
+                      print("Successfully pre-cached image: $imageUrl");
+                    })
+                    .catchError((e, s) {
+                      // Optional: Handle or log pre-caching errors
+                      print("Error pre-caching image $imageUrl: $e");
+                    });
+              }
+            }
+          }
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _error = 'No images found.';
+            _carouselItems = [];
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching carousel images: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Failed to load images.';
+          _carouselItems = [];
+        });
+      }
+    }
+  }
+
+  Future<void> _handleCarouselTap(Map<String, dynamic> item) async {
+    final String? actionType = item['actionType'];
+    final String? actionValue = item['actionValue'];
+
+    if (actionType == null || actionValue == null) {
+      print("No action defined for this carousel item.");
+      return;
+    }
+
+    if (actionType == 'url') {
+      final Uri? uri = Uri.tryParse(actionValue);
+      if (uri != null && await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        print('Could not launch $actionValue');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Tidak dapat membuka link: $actionValue')),
+          );
+        }
+      }
+    } else if (actionType == 'route') {
+      if (!mounted) return;
+      Widget? page;
+      if (actionValue == 'DaftarPendonorListPage') {
+        page = const DaftarPendonorListPage();
+      } else if (actionValue == 'DaftarPendonorPage') {
+        page = const DaftarPendonorPage();
+      }
+
+      if (page != null) {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => page!));
+      } else {
+        print('Unknown route: $actionValue');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Halaman tidak ditemukan: $actionValue')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Container(
+        width: 352,
+        height: 155,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          color: Colors.grey[200],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.25),
+              blurRadius: 10,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null || _carouselItems.isEmpty) {
+      return Container(
+        width: 352,
+        height: 155,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          color: Colors.grey[300],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.25),
+              blurRadius: 10,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            _error ?? 'No images available.',
+            style: TextStyle(color: Colors.grey[700]),
+          ),
+        ),
+      );
+    }
+
     return Column(
       children: [
         Container(
@@ -772,13 +927,53 @@ class _CarouselSectionState extends State<CarouselSection> {
             borderRadius: BorderRadius.circular(10),
             child: CarouselSlider(
               items:
-                  widget.imgList
+                  _carouselItems
                       .map(
-                        (item) => Image.asset(
-                          item,
-                          fit: BoxFit.cover,
-                          width: 352,
-                          height: 155,
+                        (item) => GestureDetector(
+                          onTap: () => _handleCarouselTap(item),
+                          child: Image.network(
+                            item['url']! as String,
+                            fit: BoxFit.cover,
+                            width: 352,
+                            height: 155,
+                            loadingBuilder: (
+                              BuildContext context,
+                              Widget child,
+                              ImageChunkEvent? loadingProgress,
+                            ) {
+                              if (loadingProgress == null) return child;
+                              return Center(
+                                child: CircularProgressIndicator(
+                                  value:
+                                      loadingProgress.expectedTotalBytes != null
+                                          ? loadingProgress
+                                                  .cumulativeBytesLoaded /
+                                              loadingProgress
+                                                  .expectedTotalBytes!
+                                          : null,
+                                ),
+                              );
+                            },
+                            errorBuilder: (
+                              BuildContext context,
+                              Object exception,
+                              StackTrace? stackTrace,
+                            ) {
+                              print('Error loading image: $exception');
+                              return Container(
+                                width: 352,
+                                height: 155,
+                                color: Colors.grey[200],
+                                child: Center(
+                                  child: Icon(
+                                    Icons.error_outline,
+                                    color: Colors.red[400],
+                                    size: 40,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
                       )
                       .toList(),
@@ -799,7 +994,7 @@ class _CarouselSectionState extends State<CarouselSection> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children:
-              widget.imgList.asMap().entries.map((entry) {
+              _carouselItems.asMap().entries.map((entry) {
                 return Container(
                   width: 12.0,
                   height: 12.0,
