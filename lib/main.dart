@@ -14,6 +14,7 @@ import 'package:dropdown_button2/dropdown_button2.dart';
 import 'dart:convert'; // For jsonEncode and jsonDecode
 import 'package:cached_network_image/cached_network_image.dart'; // Added for CachedNetworkImage
 import 'package:flutter_cache_manager/flutter_cache_manager.dart'; // Added for DefaultCacheManager
+import 'package:flutter/services.dart'; // Added for SystemUiOverlayStyle and AnnotatedRegion
 
 Future<void> main() async {
   // Menangkap semua error yang tidak tertangani
@@ -74,37 +75,77 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _checkFirstRun();
+    _initializeApp();
   }
 
-  Future<void> _checkFirstRun() async {
+  Future<void> _initializeApp() async {
     try {
+      // Menampilkan splash screen minimal 1 detik
+      final stopwatch = Stopwatch()..start();
+
       final prefs = await SharedPreferences.getInstance();
       final onboardingCompleted =
           prefs.getBool('onboarding_completed') ?? false;
 
-      await Future.delayed(
-        const Duration(seconds: 1),
-      ); // Menampilkan splash screen selama 1 detik
+      // Jika onboarding belum selesai, langsung ke onboarding
+      if (!onboardingCompleted) {
+        // Pastikan splash screen tampil minimal 1 detik
+        final elapsed = stopwatch.elapsedMilliseconds;
+        if (elapsed < 1000) {
+          await Future.delayed(Duration(milliseconds: 1000 - elapsed));
+        }
 
-      if (mounted) {
-        if (!onboardingCompleted) {
-          // Pertama kali menjalankan aplikasi, tampilkan onboarding
+        if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (context) => const OnboardingPage()),
           );
-        } else {
-          // Onboarding sudah selesai, periksa otentikasi
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const AuthWrapper()),
-          );
         }
+        return;
+      }
+
+      // Onboarding sudah selesai, lakukan authentication check
+      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+      final currentUser = FirebaseAuth.instance.currentUser;
+
+      // Tentukan tujuan navigation berdasarkan status auth
+      Widget targetPage;
+
+      if (isLoggedIn && currentUser != null && currentUser.emailVerified) {
+        // User sudah login dan email verified
+        targetPage = const HomePage();
+      } else if (isLoggedIn && currentUser == null) {
+        // Ada saved login tapi tidak ada Firebase user (session expired)
+        targetPage =
+            const HomePage(); // Bisa tetap ke HomePage atau LoginPage sesuai preferensi
+      } else {
+        // User belum login atau email belum verified
+        if (currentUser != null && !currentUser.emailVerified) {
+          // Sign out jika email belum diverifikasi
+          await FirebaseAuth.instance.signOut();
+        }
+        targetPage = const LoginPage();
+      }
+
+      // Pastikan splash screen tampil minimal 1 detik
+      final elapsed = stopwatch.elapsedMilliseconds;
+      if (elapsed < 1000) {
+        await Future.delayed(Duration(milliseconds: 1000 - elapsed));
+      }
+
+      if (mounted) {
+        Navigator.of(
+          context,
+        ).pushReplacement(MaterialPageRoute(builder: (context) => targetPage));
       }
     } catch (e) {
-      print("Error checking first run: $e");
+      print("Error during app initialization: $e");
+
+      // Jika ada error, tunggu minimal 1 detik lalu ke login
+      await Future.delayed(const Duration(seconds: 1));
+
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const AuthWrapper()),
+          MaterialPageRoute(builder: (context) => const LoginPage()),
         );
       }
     }
@@ -130,117 +171,31 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  bool _checkingPrefs = true;
-  bool _foundSavedUser = false;
-  bool _hasError = false;
-  String _errorMessage = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _checkSavedLogin();
-  }
-
-  Future<void> _checkSavedLogin() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-
-      if (isLoggedIn && FirebaseAuth.instance.currentUser == null) {
-        // Menemukan detail login tersimpan tetapi Firebase tidak memiliki pengguna saat ini
-        // Ini berarti persistensi Firebase mungkin mengalami masalah
-        print(
-          "Menemukan login tersimpan tetapi tidak ada pengguna Firebase Auth - mencoba memulihkan sesi",
-        );
-        if (mounted) {
-          setState(() {
-            _foundSavedUser = true;
-          });
-        }
-      }
-    } catch (e) {
-      print("Error checking saved login: $e");
-      if (mounted) {
-        setState(() {
-          _hasError = true;
-          _errorMessage = 'Error while checking login status: $e';
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _checkingPrefs = false;
-        });
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Jika ada kesalahan, tampilkan
-    if (_hasError) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'Terjadi kesalahan pada aplikasi',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _errorMessage,
-                style: const TextStyle(fontSize: 14),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => const LoginPage()),
-                  );
-                },
-                child: const Text('Kembali ke Login'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // Jika masih memeriksa preferensi, tampilkan loading
-    if (_checkingPrefs) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    // Jika SharedPreferences mengatakan pengguna telah login tetapi Firebase Auth tidak memiliki pengguna saat ini,
-    // kita dapat langsung mengirim pengguna ke halaman Beranda daripada ke halaman Login lagi
-    if (_foundSavedUser) {
-      print(
-        "SharedPreferences menyatakan pengguna telah login, menampilkan HomePage",
-      );
-      return const HomePage();
-    }
-
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         try {
-          print(
-            "Status auth berubah: hasData=${snapshot.hasData}, connectionState=${snapshot.connectionState}",
-          );
-
           // Periksa jika ada kesalahan
           if (snapshot.hasError) {
             print("Kesalahan stream Auth: ${snapshot.error}");
             return Scaffold(
+              backgroundColor: const Color(
+                0xFF6C1022,
+              ), // Background sama dengan splash
               body: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('Kesalahan otentikasi: ${snapshot.error}'),
+                    const Text(
+                      'Kesalahan otentikasi',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: () {
@@ -259,10 +214,27 @@ class _AuthWrapperState extends State<AuthWrapper> {
             );
           }
 
-          // Tampilkan loading saat menunggu status otentikasi
+          // Tampilkan loading dengan background yang sama dengan splash
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
+            return Scaffold(
+              backgroundColor: const Color(
+                0xFF6C1022,
+              ), // Background sama dengan splash
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      'assets/logofinblood/logofinblood.png',
+                      width: 200,
+                    ),
+                    const SizedBox(height: 20),
+                    const CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ],
+                ),
+              ),
             );
           }
 
@@ -282,14 +254,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
               // Sign out jika email belum diverifikasi
               FirebaseAuth.instance.signOut();
               return Scaffold(
+                backgroundColor: const Color(0xFF6C1022),
                 body: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text('Email belum diverifikasi'),
+                      const Text(
+                        'Email belum diverifikasi',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed:
-                            () => Navigator.push(
+                            () => Navigator.pushReplacement(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => const LoginPage(),
@@ -1046,7 +1023,10 @@ class _CarouselSectionState extends State<CarouselSection> {
         print('Could not launch $actionValue');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Tidak dapat membuka link: $actionValue')),
+            SnackBar(
+              content: Text('Tidak dapat membuka link: $actionValue'),
+              backgroundColor: const Color(0xFF6C1022),
+            ),
           );
         }
       }
@@ -1064,7 +1044,10 @@ class _CarouselSectionState extends State<CarouselSection> {
       } else {
         print('Unknown route: $actionValue');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Halaman tidak ditemukan: $actionValue')),
+          SnackBar(
+            content: Text('Halaman tidak ditemukan: $actionValue'),
+            backgroundColor: const Color(0xFF6C1022),
+          ),
         );
       }
     }
@@ -1339,6 +1322,7 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Tidak dapat melakukan panggilan ke $phoneNumber'),
+              backgroundColor: const Color(0xFF6C1022),
             ),
           );
         }
@@ -1346,9 +1330,12 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
     } catch (e) {
       print("Error saat memanggil: $e");
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: const Color(0xFF6C1022),
+          ),
+        );
       }
     }
   }
@@ -1786,10 +1773,11 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
   String? _selectedKampus;
   String? _selectedGolongan;
 
-  // State untuk melacak status pendaftaran pendonor
-  bool _isLoading = true;
-  Map<String, dynamic>? _existingDonorData;
-  String? _existingDonorId;
+  // Local cache untuk optimasi initial render
+  bool?
+  _cachedRegistrationStatus; // null = unknown, true = registered, false = not registered
+  Map<String, dynamic>? _cachedDonorData;
+  String? _cachedDonorId;
 
   final List<String> kampusList = [
     'Universitas Udayana',
@@ -1818,46 +1806,80 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
   @override
   void initState() {
     super.initState();
-    _checkExistingDonor();
+    _loadCachedRegistrationStatus();
   }
 
-  Future<void> _checkExistingDonor() async {
+  Future<void> _loadCachedRegistrationStatus() async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
+      final prefs = await SharedPreferences.getInstance();
+      final currentUser = FirebaseAuth.instance.currentUser;
 
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection('pendonor')
-              .where('user_id', isEqualTo: user.uid)
-              .get();
+      if (currentUser != null) {
+        final isRegistered = prefs.getBool(
+          'donor_registered_${currentUser.uid}',
+        );
+        final cachedDataString = prefs.getString(
+          'donor_data_${currentUser.uid}',
+        );
+        final cachedId = prefs.getString('donor_id_${currentUser.uid}');
 
-      if (snapshot.docs.isNotEmpty) {
-        final doc = snapshot.docs.first;
-        setState(() {
-          _existingDonorData = doc.data();
-          _existingDonorId = doc.id;
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _cachedRegistrationStatus = isRegistered;
+            if (cachedDataString != null) {
+              _cachedDonorData = Map<String, dynamic>.from(
+                jsonDecode(cachedDataString) as Map,
+              );
+            }
+            _cachedDonorId = cachedId;
+          });
+        }
       }
     } catch (e) {
-      print('Error checking existing donor: $e');
-      setState(() {
-        _isLoading = false;
-      });
+      print('Error loading cached registration status: $e');
     }
   }
 
-  Future<void> _deleteDonor() async {
+  Future<void> _saveRegistrationStatus({
+    required bool isRegistered,
+    Map<String, dynamic>? donorData,
+    String? donorId,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final currentUser = FirebaseAuth.instance.currentUser;
+
+      if (currentUser != null) {
+        await prefs.setBool(
+          'donor_registered_${currentUser.uid}',
+          isRegistered,
+        );
+
+        if (isRegistered && donorData != null && donorId != null) {
+          await prefs.setString(
+            'donor_data_${currentUser.uid}',
+            jsonEncode(donorData),
+          );
+          await prefs.setString('donor_id_${currentUser.uid}', donorId);
+        } else if (!isRegistered) {
+          // Clear cache jika status tidak terdaftar
+          await prefs.remove('donor_data_${currentUser.uid}');
+          await prefs.remove('donor_id_${currentUser.uid}');
+        }
+      }
+    } catch (e) {
+      print('Error saving registration status: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _namaController.dispose();
+    _hpController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _deleteDonor(String donorId) async {
     // Tampilkan dialog konfirmasi
     final bool? confirmDelete = await showDialog<bool>(
       context: context,
@@ -1899,39 +1921,44 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
           ),
     );
 
-    if (confirmDelete == true && _existingDonorId != null) {
+    if (confirmDelete == true) {
       try {
         await FirebaseFirestore.instance
             .collection('pendonor')
-            .doc(_existingDonorId)
+            .doc(donorId)
             .delete();
 
-        setState(() {
-          _existingDonorData = null;
-          _existingDonorId = null;
-        });
+        // Update local cache setelah berhasil hapus
+        await _saveRegistrationStatus(isRegistered: false);
+
+        if (mounted) {
+          setState(() {
+            _cachedRegistrationStatus = false;
+            _cachedDonorData = null;
+            _cachedDonorId = null;
+          });
+        }
 
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Data pendonor berhasil dihapus!')),
+            const SnackBar(
+              content: Text('Data pendonor berhasil dihapus!'),
+              backgroundColor: Color(0xFF6C1022),
+            ),
           );
         }
       } catch (e) {
         print('Error deleting donor: $e');
         if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Gagal menghapus data: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Gagal menghapus data: $e'),
+              backgroundColor: const Color(0xFF6C1022),
+            ),
+          );
         }
       }
     }
-  }
-
-  @override
-  void dispose() {
-    _namaController.dispose();
-    _hpController.dispose();
-    super.dispose();
   }
 
   Future<void> _submitForm() async {
@@ -1941,9 +1968,12 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Pengguna belum login')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Pengguna belum login'),
+              backgroundColor: Color(0xFF6C1022),
+            ),
+          );
         }
         return;
       }
@@ -1962,41 +1992,127 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Semua field harus diisi dengan benar'),
+              backgroundColor: Color(0xFF6C1022),
             ),
           );
         }
         return;
       }
 
-      await FirebaseFirestore.instance.collection('pendonor').add({
+      // Tampilkan dialog konfirmasi
+      final bool confirmRegister =
+          await showDialog(
+            context: context,
+            builder:
+                (context) => AlertDialog(
+                  title: const Center(
+                    child: Text(
+                      'Konfirmasi Daftar',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF6C1022),
+                        fontSize: 20,
+                      ),
+                    ),
+                  ),
+                  content: const Text(
+                    'Apakah Anda yakin ingin mendaftar menjadi pendonor darah?',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text(
+                        'Batal',
+                        style: TextStyle(color: Color(0xFF6C1022)),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text(
+                        'Daftar',
+                        style: TextStyle(
+                          color: Color(0xFF6C1022),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+          ) ??
+          false;
+
+      if (!confirmRegister) return;
+
+      final docRef = await FirebaseFirestore.instance.collection('pendonor').add(
+        {
+          'nama': nama,
+          'nomor_hp': nomorHP,
+          'kampus': kampus,
+          'golongan_darah': golonganDarah,
+          'user_id':
+              user.uid, // Tambahkan user_id untuk menghubungkan dengan pengguna
+          'timestamp': FieldValue.serverTimestamp(),
+        },
+      );
+
+      // Data yang baru ditambahkan
+      final newDonorData = {
         'nama': nama,
         'nomor_hp': nomorHP,
         'kampus': kampus,
         'golongan_darah': golonganDarah,
-        'user_id':
-            user.uid, // Tambahkan user_id untuk menghubungkan dengan pengguna
-        'timestamp': FieldValue.serverTimestamp(),
+        'user_id': user.uid,
+      };
+
+      // Update local cache setelah berhasil mendaftar
+      await _saveRegistrationStatus(
+        isRegistered: true,
+        donorData: newDonorData,
+        donorId: docRef.id,
+      );
+
+      // Update UI state
+      if (mounted) {
+        setState(() {
+          _cachedRegistrationStatus = true;
+          _cachedDonorData = newDonorData;
+          _cachedDonorId = docRef.id;
+        });
+      }
+
+      // Clear form setelah berhasil mendaftar
+      _namaController.clear();
+      _hpController.clear();
+      setState(() {
+        _selectedKampus = null;
+        _selectedGolongan = null;
       });
 
-      // Refresh data setelah berhasil mendaftar
-      await _checkExistingDonor();
-
+      // Show success message
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Pendaftaran berhasil!')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pendaftaran berhasil!'),
+            backgroundColor: Color(0xFF6C1022),
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
     } catch (e) {
       print('Error _submitForm: $e');
+
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Gagal mendaftar: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal mendaftar: $e'),
+            backgroundColor: const Color(0xFF6C1022),
+          ),
+        );
       }
     }
   }
 
-  Widget _buildDonorDataView() {
+  Widget _buildDonorDataView(Map<String, dynamic> donorData, String donorId) {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -2043,7 +2159,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _existingDonorData?['nama'] ?? '-',
+                    donorData['nama'] ?? '-',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15,
@@ -2063,7 +2179,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _existingDonorData?['nomor_hp'] ?? '-',
+                    donorData['nomor_hp'] ?? '-',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15,
@@ -2083,7 +2199,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _existingDonorData?['kampus'] ?? '-',
+                    donorData['kampus'] ?? '-',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15,
@@ -2103,7 +2219,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _existingDonorData?['golongan_darah'] ?? '-',
+                    donorData['golongan_darah'] ?? '-',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15,
@@ -2121,7 +2237,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
               width: 183,
               height: 51,
               child: ElevatedButton(
-                onPressed: _deleteDonor,
+                onPressed: () => _deleteDonor(donorId),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6C1022),
                   foregroundColor: Colors.white,
@@ -2435,6 +2551,37 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null) {
+      return Scaffold(
+        appBar: AppBar(
+          toolbarHeight: 66,
+          title: const Text(
+            'Daftar Menjadi Pendonor',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              fontSize: 18,
+            ),
+          ),
+          backgroundColor: const Color(0xFF6C1022),
+          centerTitle: true,
+          elevation: 4,
+          iconTheme: const IconThemeData(color: Colors.white),
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(20),
+              bottomRight: Radius.circular(20),
+            ),
+          ),
+        ),
+        body: const Center(
+          child: Text('Pengguna belum login', style: TextStyle(fontSize: 16)),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 66,
@@ -2471,16 +2618,101 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                 ),
               ),
             ),
-            // Tampilkan loading, data pendonor, atau form pendaftaran
-            if (_isLoading)
-              const Padding(
-                padding: EdgeInsets.all(50.0),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_existingDonorData != null)
-              _buildDonorDataView()
-            else
-              _buildRegistrationForm(),
+            // Hybrid approach: Cache untuk initial render + StreamBuilder untuk sync
+            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('pendonor')
+                      .where('user_id', isEqualTo: currentUser.uid)
+                      .snapshots(),
+              builder: (context, snapshot) {
+                // Update cache berdasarkan data stream untuk akurasi
+                if (snapshot.hasData) {
+                  final docs = snapshot.data!.docs;
+                  final bool streamIsRegistered = docs.isNotEmpty;
+
+                  // Sync cache dengan data terbaru dari Firestore
+                  WidgetsBinding.instance.addPostFrameCallback((_) async {
+                    if (streamIsRegistered && docs.isNotEmpty) {
+                      final doc = docs.first;
+                      final donorData = doc.data();
+                      final donorId = doc.id;
+
+                      // Update cache jika ada perbedaan
+                      if (_cachedRegistrationStatus != true ||
+                          _cachedDonorId != donorId) {
+                        await _saveRegistrationStatus(
+                          isRegistered: true,
+                          donorData: donorData,
+                          donorId: donorId,
+                        );
+
+                        if (mounted) {
+                          setState(() {
+                            _cachedRegistrationStatus = true;
+                            _cachedDonorData = donorData;
+                            _cachedDonorId = donorId;
+                          });
+                        }
+                      }
+                    } else if (!streamIsRegistered &&
+                        _cachedRegistrationStatus == true) {
+                      // Data dihapus di Firestore, update cache
+                      await _saveRegistrationStatus(isRegistered: false);
+
+                      if (mounted) {
+                        setState(() {
+                          _cachedRegistrationStatus = false;
+                          _cachedDonorData = null;
+                          _cachedDonorId = null;
+                        });
+                      }
+                    }
+                  });
+                }
+
+                // Handle error dari Firestore
+                if (snapshot.hasError) {
+                  return Padding(
+                    padding: const EdgeInsets.all(50.0),
+                    child: Center(
+                      child: Text(
+                        'Terjadi error: ${snapshot.error}',
+                        style: const TextStyle(fontFamily: 'Poppins'),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+
+                // Prioritas rendering:
+                // 1. Cache data (untuk instant render)
+                // 2. Stream data (untuk akurasi)
+                // 3. Fallback ke form (jika tidak ada data)
+
+                // Jika ada cache data, gunakan untuk instant render
+                if (_cachedRegistrationStatus == true &&
+                    _cachedDonorData != null &&
+                    _cachedDonorId != null) {
+                  return _buildDonorDataView(
+                    _cachedDonorData!,
+                    _cachedDonorId!,
+                  );
+                }
+
+                // Jika stream sudah ada data, gunakan stream data
+                if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+                  final doc = snapshot.data!.docs.first;
+                  final donorData = doc.data();
+                  final donorId = doc.id;
+                  return _buildDonorDataView(donorData, donorId);
+                }
+
+                // Jika cache menunjukkan tidak terdaftar, atau tidak ada data
+                // langsung tampilkan form (no loading)
+                return _buildRegistrationForm();
+              },
+            ),
           ],
         ),
       ),

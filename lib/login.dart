@@ -78,6 +78,7 @@ class _LoginPageState extends State<LoginPage> {
                 'Email verifikasi telah dikirim ulang. Silakan periksa inbox Anda.',
               ),
               duration: Duration(seconds: 5),
+              backgroundColor: Color(0xFF6C1022),
             ),
           );
         }
@@ -204,6 +205,7 @@ class _LoginPageState extends State<LoginPage> {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text('Email wajib diisi'),
+                                  backgroundColor: Color(0xFF6C1022),
                                 ),
                               );
                               return;
@@ -296,7 +298,10 @@ class _LoginPageState extends State<LoginPage> {
                                 String errorMessage =
                                     e.message ?? 'Terjadi kesalahan';
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(errorMessage)),
+                                  SnackBar(
+                                    content: Text(errorMessage),
+                                    backgroundColor: const Color(0xFF6C1022),
+                                  ),
                                 );
                               }
                             } catch (e) {
@@ -307,6 +312,7 @@ class _LoginPageState extends State<LoginPage> {
                                   content: Text(
                                     'Terjadi kesalahan saat mengirim email reset',
                                   ),
+                                  backgroundColor: Color(0xFF6C1022),
                                 ),
                               );
                             }
