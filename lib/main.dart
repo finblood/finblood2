@@ -832,58 +832,70 @@ class CardRankKampus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: const Color(0xFF6C1022),
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.asset(
-                'assets/logokampus/$namaKampus.png',
-                width: 40,
-                height: 40,
-                fit: BoxFit.cover,
-                errorBuilder:
-                    (context, error, stackTrace) =>
-                        const Icon(Icons.school, size: 40, color: Colors.grey),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                namaKampus,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                  color: Colors.white,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [Color(0xFF6C1022), Color(0xFFD21F42)],
+          ),
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 11.0, horizontal: 16.0),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/logokampus/$namaKampus.png',
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
+                  errorBuilder:
+                      (context, error, stackTrace) => const Icon(
+                        Icons.school,
+                        size: 40,
+                        color: Colors.grey,
+                      ),
                 ),
               ),
-            ),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  jumlahPendonor.toString(),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  namaKampus,
                   style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
                     color: Colors.white,
                   ),
-                  textAlign: TextAlign.center,
                 ),
-                const Text(
-                  'pendonor',
-                  style: TextStyle(fontSize: 13, color: Colors.white),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ],
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    jumlahPendonor.toString(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Colors.white,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const Text(
+                    'pendonor',
+                    style: TextStyle(fontSize: 13, color: Colors.white),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1257,80 +1269,94 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
                             final data = docs[i].data();
                             final String nomorHP = data['nomor_hp'] ?? '-';
                             return Card(
-                              color: const Color(0xFF6C1022),
                               margin: const EdgeInsets.symmetric(horizontal: 4),
                               elevation: 2,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(15),
                               ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 13,
-                                  horizontal: 16.0,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                    colors: [
+                                      Color(0xFF6C1022),
+                                      Color(0xFFD21F42),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(15),
                                 ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          RichText(
-                                            text: TextSpan(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 13,
+                                    horizontal: 16.0,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            RichText(
+                                              text: TextSpan(
+                                                style: const TextStyle(
+                                                  fontSize: 18,
+                                                  color: Colors.white,
+                                                  fontFamily: 'Poppins',
+                                                ),
+                                                children: [
+                                                  TextSpan(
+                                                    text:
+                                                        (data['nama'] ?? '-') +
+                                                        ' - ',
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: Colors.white,
+                                                      fontFamily: 'Poppins',
+                                                    ),
+                                                  ),
+                                                  TextSpan(
+                                                    text:
+                                                        data['golongan_darah'] ??
+                                                        '-',
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: Colors.white,
+                                                      fontFamily: 'Poppins',
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 0),
+                                            Text(
+                                              data['kampus'] ?? '-',
                                               style: const TextStyle(
-                                                fontSize: 18,
+                                                fontSize: 16,
                                                 color: Colors.white,
                                                 fontFamily: 'Poppins',
                                               ),
-                                              children: [
-                                                TextSpan(
-                                                  text:
-                                                      (data['nama'] ?? '-') +
-                                                      ' - ',
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.white,
-                                                    fontFamily: 'Poppins',
-                                                  ),
-                                                ),
-                                                TextSpan(
-                                                  text:
-                                                      data['golongan_darah'] ??
-                                                      '-',
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.white,
-                                                    fontFamily: 'Poppins',
-                                                  ),
-                                                ),
-                                              ],
                                             ),
-                                          ),
-                                          const SizedBox(height: 0),
-                                          Text(
-                                            data['kampus'] ?? '-',
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              color: Colors.white,
-                                              fontFamily: 'Poppins',
-                                            ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    // Tombol telepon
-                                    nomorHP != '-'
-                                        ? IconButton(
-                                          icon: const Icon(
-                                            Icons.phone,
-                                            color: Colors.white,
-                                            size: 28,
-                                          ),
-                                          onPressed:
-                                              () => _makePhoneCall(nomorHP),
-                                        )
-                                        : const SizedBox.shrink(),
-                                  ],
+                                      // Tombol telepon
+                                      nomorHP != '-'
+                                          ? IconButton(
+                                            icon: const Icon(
+                                              Icons.phone,
+                                              color: Colors.white,
+                                              size: 28,
+                                            ),
+                                            onPressed:
+                                                () => _makePhoneCall(nomorHP),
+                                          )
+                                          : const SizedBox.shrink(),
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
