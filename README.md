@@ -19,6 +19,7 @@ Finblood adalah aplikasi mobile untuk memudahkan pencarian dan pendaftaran pendo
 - **Daftar Menjadi Pendonor**: Tambahkan diri Anda ke database pendonor darah
 - **Peringkat Kampus**: Lihat statistik jumlah pendonor dari setiap kampus
 - **Kontak Langsung**: Hubungi pendonor langsung melalui nomor telepon
+- **Carousel Slide**: Menampilkan carousel slide yang dapat diatur secara dinamis melalui backend atau pengaturan admin. Setiap slide memiliki konten visual (gambar atau teks) dan aksi yang dapat disesuaikan
 
 ## Screenshot
 
@@ -83,6 +84,15 @@ Finblood adalah aplikasi mobile untuk memudahkan pencarian dan pendaftaran pendo
 - **golongan_darah**: String (A, B, AB, O)
 - **timestamp**: Timestamp
 
+### Collection: carousel_images
+- **url**: String
+- **order**: Number
+- **actionType**: String
+- **actionValue**: String
+
+### Collection: carousel_metadata
+- **lastUpdated**: Timestamp
+
 ## Cloud Functions
 
 Aplikasi ini menggunakan Cloud Functions untuk:
@@ -92,4 +102,3 @@ Aplikasi ini menggunakan Cloud Functions untuk:
 ## Pengembangan Lebih Lanjut
 
 - Integrasi dengan rumah sakit dan PMI
-- Interaktif Carousel Slide (e.g., setiap slide dapat diklik untuk membuka artikel, halaman detail, atau tautan informasi kampanye).
