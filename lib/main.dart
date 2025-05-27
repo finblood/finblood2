@@ -58,6 +58,11 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.red),
         fontFamily: 'Poppins',
+        textSelectionTheme: const TextSelectionThemeData(
+          selectionColor: Color(0xFFE88094),
+          cursorColor: Color(0xFFCA4A63),
+          selectionHandleColor: Color(0xFFCA4A63),
+        ),
       ),
       home: const SplashScreen(),
     );
@@ -452,8 +457,8 @@ class HomePage extends StatelessWidget {
             decoration: const BoxDecoration(
               color: Color(0xFF6C1022),
               borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
+                bottomLeft: Radius.circular(25),
+                bottomRight: Radius.circular(25),
               ),
             ),
             padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
@@ -1359,8 +1364,8 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
         iconTheme: const IconThemeData(color: Colors.white),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.only(
-            bottomLeft: Radius.circular(20),
-            bottomRight: Radius.circular(20),
+            bottomLeft: Radius.circular(25),
+            bottomRight: Radius.circular(25),
           ),
         ),
       ),
@@ -2426,7 +2431,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(15),
                 ),
-                maxHeight: 500,
+                maxHeight: 400,
                 scrollbarTheme: ScrollbarThemeData(
                   thumbVisibility: MaterialStateProperty.all(true),
                   thickness: MaterialStateProperty.all(6),
@@ -2551,36 +2556,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-
-    if (currentUser == null) {
-      return Scaffold(
-        appBar: AppBar(
-          toolbarHeight: 66,
-          title: const Text(
-            'Daftar Menjadi Pendonor',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-              fontSize: 18,
-            ),
-          ),
-          backgroundColor: const Color(0xFF6C1022),
-          centerTitle: true,
-          elevation: 4,
-          iconTheme: const IconThemeData(color: Colors.white),
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.only(
-              bottomLeft: Radius.circular(20),
-              bottomRight: Radius.circular(20),
-            ),
-          ),
-        ),
-        body: const Center(
-          child: Text('Pengguna belum login', style: TextStyle(fontSize: 16)),
-        ),
-      );
-    }
+    final currentUser = FirebaseAuth.instance.currentUser!;
 
     return Scaffold(
       appBar: AppBar(
@@ -2599,8 +2575,8 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
         iconTheme: const IconThemeData(color: Colors.white),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.only(
-            bottomLeft: Radius.circular(20),
-            bottomRight: Radius.circular(20),
+            bottomLeft: Radius.circular(25),
+            bottomRight: Radius.circular(25),
           ),
         ),
       ),

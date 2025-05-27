@@ -436,6 +436,7 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Image.asset(
           'assets/logofinblood/logomaroon.png',
@@ -446,116 +447,174 @@ class _RegisterPageState extends State<RegisterPage> {
         centerTitle: true,
         elevation: 0,
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24.0, 0, 24.0, 24.0),
-          child: Form(
-            key: _formKey,
+      body: SingleChildScrollView(
+        physics: ClampingScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight:
+                MediaQuery.of(context).size.height -
+                AppBar().preferredSize.height -
+                MediaQuery.of(context).padding.top,
+          ),
+          child: IntrinsicHeight(
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Image.asset('assets/images/register3d.png', height: 208),
-                const SizedBox(height: 20),
-                const Text(
-                  'Buat Akun Baru',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF6C1022),
+                // Bagian atas dengan logo dan teks sambutan
+                SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24.0, 0, 24.0, 0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 35),
+                      Image.asset('assets/images/register3d.png', height: 185),
+                      const SizedBox(height: 0),
+                      const Text(
+                        'Selamat Datang di Finblood',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF6C1022),
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      const Text(
+                        'Daftar untuk memulai',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF6B6B6B),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 5),
-                const Text(
-                  'Daftar untuk memulai',
-                  style: TextStyle(fontSize: 14, color: Color(0xFF6B6B6B)),
-                ),
-                const SizedBox(height: 24),
-                _buildTextField(
-                  controller: _namaController,
-                  labelText: 'Nama Lengkap',
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Nama lengkap wajib diisi';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _emailController,
-                  labelText: 'Email',
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Email wajib diisi';
-                    }
-                    if (!value.contains('@')) {
-                      return 'Format email tidak valid';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _passwordController,
-                  labelText: 'Kata Sandi',
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Kata sandi wajib diisi';
-                    }
-                    if (value.length < 6) {
-                      return 'Kata sandi minimal 6 karakter';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _confirmController,
-                  labelText: 'Konfirmasi Kata Sandi',
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Konfirmasi kata sandi wajib diisi';
-                    }
-                    if (value != _passwordController.text) {
-                      return 'Kata sandi tidak sama';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-                if (_errorMessage != null) _buildErrorMessage(),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _register,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6C1022),
-                      foregroundColor: Colors.white,
-                      textStyle: const TextStyle(fontSize: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(50),
+                const SizedBox(height: 20),
+                // Container dengan form register
+                Expanded(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF6C1022),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(35),
+                        topRight: Radius.circular(35),
                       ),
                     ),
-                    child:
-                        _isLoading
-                            ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
-                                strokeWidth: 2.5,
-                              ),
-                            )
-                            : const Text(
-                              'Daftar',
-                              style: TextStyle(fontWeight: FontWeight.w700),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        24.0,
+                        30.0,
+                        24.0,
+                        24.0,
+                      ),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildTextField(
+                              controller: _namaController,
+                              labelText: 'Nama Lengkap',
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return 'Nama lengkap wajib diisi';
+                                }
+                                return null;
+                              },
                             ),
+                            const SizedBox(height: 16),
+                            _buildTextField(
+                              controller: _emailController,
+                              labelText: 'Email',
+                              keyboardType: TextInputType.emailAddress,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Email wajib diisi';
+                                }
+                                if (!value.contains('@')) {
+                                  return 'Format email tidak valid';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _buildTextField(
+                              controller: _passwordController,
+                              labelText: 'Kata Sandi',
+                              obscureText: true,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Kata sandi wajib diisi';
+                                }
+                                if (value.length < 6) {
+                                  return 'Kata sandi minimal 6 karakter';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _buildTextField(
+                              controller: _confirmController,
+                              labelText: 'Konfirmasi Kata Sandi',
+                              obscureText: true,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Konfirmasi kata sandi wajib diisi';
+                                }
+                                if (value != _passwordController.text) {
+                                  return 'Kata sandi tidak sama';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 24),
+                            if (_errorMessage != null) _buildErrorMessage(),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 48,
+                              child: ElevatedButton(
+                                onPressed: _isLoading ? null : _register,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      _isLoading
+                                          ? const Color(0xFFCA4A63)
+                                          : Theme.of(
+                                            context,
+                                          ).scaffoldBackgroundColor,
+                                  disabledBackgroundColor: const Color(
+                                    0xFFCA4A63,
+                                  ),
+                                  foregroundColor: const Color(0xFF6C1022),
+                                  textStyle: const TextStyle(fontSize: 18),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(50),
+                                  ),
+                                  elevation: 5,
+                                  shadowColor: const Color(0xFF000000),
+                                ),
+                                child:
+                                    _isLoading
+                                        ? const SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Colors.white,
+                                                ),
+                                            strokeWidth: 2.5,
+                                          ),
+                                        )
+                                        : const Text(
+                                          'Daftar',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -582,22 +641,32 @@ class _RegisterPageState extends State<RegisterPage> {
         labelText: labelText,
         border: const OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(50)),
-          borderSide: BorderSide(color: Color(0xFF6C1022)),
+          borderSide: BorderSide(color: Colors.white),
         ),
         enabledBorder: const OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(50)),
-          borderSide: BorderSide(color: Color(0xFF6C1022), width: 1.5),
+          borderSide: BorderSide(color: Colors.white, width: 1.5),
+        ),
+        errorBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(50)),
+          borderSide: BorderSide(color: Colors.white, width: 1.5),
+        ),
+        focusedErrorBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(50)),
+          borderSide: BorderSide(color: Colors.white, width: 2.5),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 20,
           vertical: 16,
         ),
-        labelStyle: const TextStyle(color: Color(0xFF6B6B6B)),
+        labelStyle: const TextStyle(color: Colors.white),
+        errorStyle: const TextStyle(color: Colors.white),
         focusedBorder: const OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(50)),
-          borderSide: BorderSide(color: Color(0xFF6C1022), width: 2.5),
+          borderSide: BorderSide(color: Colors.white, width: 2.5),
         ),
       ),
+      style: const TextStyle(color: Colors.white),
       keyboardType: keyboardType,
       obscureText: obscureText,
       validator: validator,
@@ -612,13 +681,13 @@ class _RegisterPageState extends State<RegisterPage> {
         width: double.infinity,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.red.shade50,
+          color: Colors.white.withOpacity(0.1),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.red.shade200),
+          border: Border.all(color: Colors.white.withOpacity(0.3)),
         ),
         child: Text(
           _errorMessage!,
-          style: const TextStyle(color: Colors.red),
+          style: const TextStyle(color: Colors.white),
           textAlign: TextAlign.center,
         ),
       ),
