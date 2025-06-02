@@ -31,6 +31,18 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Ikon Notifikasi Default -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_finblood_logo" /> 
+            <!-- Menggunakan ikon notifikasi khusus -->
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color_accent" /> 
+            <!-- Anda perlu mendefinisikan @color/notification_color_accent di android/app/src/main/res/values/colors.xml -->
+
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

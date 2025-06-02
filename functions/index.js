@@ -356,4 +356,65 @@ exports.updateUserDisplayName = onRequest({
       code: error.code
     });
   }
+});
+
+// Fungsi baru untuk mengirim notifikasi ketika ada pendonor baru
+exports.notifyNewDonor = onDocumentCreated("pendonor/{donorId}", async (event) => {
+  const snap = event.data;
+  if (!snap) {
+    console.log("No data associated with the event");
+    return;
+  }
+  const donorData = snap.data();
+
+  const namaPendonor = donorData.nama || "Seseorang"; // Ambil nama, atau default "Seseorang"
+  const golonganDarah = donorData.golongan_darah || "Tidak diketahui";
+  const kampus = donorData.kampus || "Tidak diketahui";
+
+  console.log(`Pendonor baru terdeteksi: ${namaPendonor} (${golonganDarah}) dari ${kampus}`);
+
+  const topic = "pendonor_baru"; // Mengganti nama topik
+
+  // Definisikan payload dan data dalam objek pesan tunggal
+  const message = {
+    notification: {
+      title: "Pendonor Darah Baru!",
+      body: `${namaPendonor} (${golonganDarah}) dari ${kampus} baru saja mendaftar menjadi pendonor.`,
+      // imageUrl: "URL_TO_IMAGE_IF_ANY" // Jika ingin gambar besar
+    },
+    android: {
+      notification: {
+        icon: 'ic_stat_finblood_logo', // Menggunakan ikon notifikasi khusus
+        color: '#6C1022', // Contoh warna (sesuaikan dengan branding Anda)
+        // sound: 'default' // atau suara kustom
+        // channelId: 'pendonor_baru_channel' // Opsional jika sudah dihandle klien atau ingin channel khusus dari server
+      },
+      priority: 'high' // Pastikan prioritas tinggi untuk pengiriman cepat
+    },
+    apns: { // Pengaturan untuk iOS jika diperlukan
+      payload: {
+        aps: {
+          sound: 'default' // atau suara kustom iOS
+          // badge: 1, // Contoh badge
+        }
+      }
+    },
+    data: {
+      // Anda bisa mengirim data tambahan di sini yang bisa dihandle oleh aplikasi klien
+      // Misalnya, ID pendonor atau layar yang akan dibuka
+      click_action: "FLUTTER_NOTIFICATION_CLICK", // Standar untuk Flutter
+      donorId: event.params.donorId, // Mengirim ID pendonor
+      screen: "DaftarPendonorListPage" // Data untuk navigasi
+    },
+    topic: topic // Menambahkan properti topik di sini
+  };
+
+  try {
+    console.log(`Mengirim notifikasi ke topik: ${topic} dengan pesan:`, JSON.stringify(message));
+    // Gunakan admin.messaging().send(message) sebagai cara yang lebih modern dan direkomendasikan
+    const response = await admin.messaging().send(message);
+    console.log("Notifikasi berhasil dikirim:", response);
+  } catch (error) {
+    console.error("Gagal mengirim notifikasi:", error);
+  }
 }); 

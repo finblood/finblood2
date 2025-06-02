@@ -15,6 +15,37 @@ import 'dart:convert'; // For jsonEncode and jsonDecode
 import 'package:cached_network_image/cached_network_image.dart'; // Added for CachedNetworkImage
 import 'package:flutter_cache_manager/flutter_cache_manager.dart'; // Added for DefaultCacheManager
 import 'package:flutter/services.dart'; // Added for SystemUiOverlayStyle and AnnotatedRegion
+// Impor untuk notifikasi
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // Impor FCM
+import 'notifikasi_page.dart'; // Impor halaman notifikasi
+
+// Fungsi top-level untuk menangani tap notifikasi di background
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse notificationResponse) {
+  // handle action
+  print('Notification tapped in background: ${notificationResponse.payload}');
+  // Anda bisa menyimpan payload atau melakukan aksi lain di sini
+  // yang akan diproses ketika aplikasi dibuka.
+}
+
+// GlobalKey untuk NavigatorState agar bisa navigasi dari luar Widget tree
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// Handler untuk pesan FCM saat aplikasi di background/terminated
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // Jika Anda akan menggunakan plugin lain di sini (seperti Firebase.initializeApp), pastikan Flutter sudah terinisialisasi.
+  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform); // Mungkin perlu jika ada inisialisasi Firebase lain di sini
+  print("Handling a background message: ${message.messageId}");
+  print('Message data: ${message.data}');
+  if (message.notification != null) {
+    print('Message also contained a notification: ${message.notification}');
+    // Di sini kita bisa menampilkan notifikasi lokal jika diperlukan,
+    // tapi biasanya FCM menangani ini untuk background messages di Android.
+    // Untuk iOS, atau jika ingin kustomisasi penuh, Anda bisa tampilkan notifikasi lokal.
+  }
+}
 
 Future<void> main() async {
   // Menangkap semua error yang tidak tertangani
@@ -28,13 +59,19 @@ Future<void> main() async {
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         );
-
-        // Menghapus pemanggilan signOut untuk mempertahankan status otentikasi pengguna
-
         print("Firebase berhasil di inisialisasikan");
+
+        // Setup FCM
+        FirebaseMessaging.onBackgroundMessage(
+          _firebaseMessagingBackgroundHandler,
+        );
+
+        // (Opsional) Dapatkan token FCM - bagus untuk debug atau direct messaging
+        // String? token = await FirebaseMessaging.instance.getToken();
+        // print("FCM Token: $token");
       } catch (e) {
-        print("Error initializing Firebase: $e");
-        // Tetap lanjutkan aplikasi meskipun Firebase gagal
+        print("Error initializing Firebase or FCM: $e");
+        // Tetap lanjutkan aplikasi meskipun Firebase/FCM gagal
       }
 
       // Jalankan aplikasi
@@ -54,6 +91,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey, // Set navigatorKey di sini
       title: 'Finblood',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.red),
@@ -302,8 +340,204 @@ class _AuthWrapperState extends State<AuthWrapper> {
 }
 
 // Halaman Beranda
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  int _unreadCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeLocalNotifications();
+    _initializeFCM();
+    _getUnreadCount();
+  }
+
+  Future<void> _getUnreadCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastOpened = prefs.getInt('last_opened_notifikasi') ?? 0;
+    final snapshot =
+        await FirebaseFirestore.instance
+            .collection('pendonor')
+            .orderBy('timestamp', descending: true)
+            .get();
+    int count = 0;
+    for (var doc in snapshot.docs) {
+      final ts = doc['timestamp'];
+      if (ts is Timestamp && ts.millisecondsSinceEpoch > lastOpened) {
+        count++;
+      }
+    }
+    setState(() {
+      _unreadCount = count;
+    });
+  }
+
+  Future<void> _initializeLocalNotifications() async {
+    // Ganti nama fungsi agar lebih jelas
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const DarwinInitializationSettings initializationSettingsIOS =
+        DarwinInitializationSettings(
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+        );
+    const InitializationSettings initializationSettings =
+        InitializationSettings(
+          android: initializationSettingsAndroid,
+          iOS: initializationSettingsIOS,
+        );
+    await flutterLocalNotificationsPlugin.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (
+        NotificationResponse notificationResponse,
+      ) {
+        // Modifikasi handler untuk notifikasi lokal
+        print(
+          'Local notification tapped with payload: ${notificationResponse.payload}',
+        );
+        if (notificationResponse.payload != null &&
+            notificationResponse.payload!.isNotEmpty) {
+          try {
+            final Map<String, dynamic> payloadData = jsonDecode(
+              notificationResponse.payload!,
+            );
+            _handleNavigationFromNotification(payloadData);
+          } catch (e) {
+            print(
+              'Error decoding payload for local notification navigation: $e',
+            );
+          }
+        }
+      },
+    );
+  }
+
+  void _handleNavigationFromNotification(Map<String, dynamic> data) {
+    print("Handling navigation for data: $data");
+    final screen = data['screen'];
+    if (screen == 'DaftarPendonorListPage') {
+      // Pastikan navigatorKey.currentContext tidak null
+      if (navigatorKey.currentContext != null) {
+        Navigator.push(
+          navigatorKey.currentContext!,
+          MaterialPageRoute(
+            builder: (context) => const DaftarPendonorListPage(),
+          ),
+        );
+      } else {
+        print("navigatorKey.currentContext is null, cannot navigate");
+        // Anda bisa menyimpan data navigasi ini dan melakukannya saat context tersedia
+      }
+    }
+    // Tambahkan kondisi lain jika ada halaman lain untuk dinavigasi
+  }
+
+  // Fungsi baru untuk inisialisasi FCM di HomePageState
+  Future<void> _initializeFCM() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+    // Meminta izin notifikasi (iOS & Android 13+)
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      announcement: false,
+      badge: true,
+      carPlay: false,
+      criticalAlert: false,
+      provisional: false,
+      sound: true,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      print('User granted permission for FCM notifications');
+    } else if (settings.authorizationStatus ==
+        AuthorizationStatus.provisional) {
+      print('User granted provisional permission for FCM notifications');
+    } else {
+      print(
+        'User declined or has not accepted permission for FCM notifications',
+      );
+    }
+
+    // Subscribe ke topik untuk tes
+    try {
+      await FirebaseMessaging.instance.subscribeToTopic('pendonor_baru');
+      print('Berhasil subscribe ke topik: pendonor_baru');
+    } catch (e) {
+      print('Gagal subscribe ke topik: pendonor_baru. Error: $e');
+    }
+
+    // (Opsional) Refresh token jika berubah
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+      print('FCM Token refreshed: $newToken');
+      // Kirim token baru ini ke server aplikasi Anda jika diperlukan
+    });
+
+    // Listener untuk pesan FCM saat aplikasi di foreground
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print('Got a message whilst in the foreground!');
+      print('Message data: ${message.data}');
+
+      RemoteNotification? notification = message.notification;
+      AndroidNotification? android = message.notification?.android;
+
+      if (notification != null) {
+        print(
+          'Message also contained a notification: ${notification.title} - ${notification.body}',
+        );
+        // Tampilkan notifikasi lokal menggunakan flutter_local_notifications
+        // agar konsisten dan bisa dikustomisasi
+        flutterLocalNotificationsPlugin.show(
+          notification.hashCode, // ID unik untuk notifikasi
+          notification.title,
+          notification.body,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              'finblood_fcm_channel', // ID channel baru untuk FCM
+              'Finblood FCM Notifications',
+              channelDescription: 'Notifikasi FCM dari aplikasi Finblood',
+              icon:
+                  'ic_stat_finblood_logo', // Menggunakan ikon notifikasi khusus
+              importance: Importance.max,
+              priority: Priority.high,
+              color: const Color(0xFF6C1022), // Tambahkan warna ini
+            ),
+            iOS: const DarwinNotificationDetails(
+              presentAlert: true,
+              presentBadge: true,
+              presentSound: true,
+            ),
+          ),
+          payload: jsonEncode(message.data), // Kirim data pesan sebagai payload
+        );
+      }
+    });
+
+    // Listener untuk ketika pengguna membuka aplikasi dari notifikasi (saat background)
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print('A new onMessageOpenedApp event was published!');
+      print('Message data: ${message.data}');
+      _handleNavigationFromNotification(message.data);
+    });
+
+    // Periksa apakah aplikasi dibuka dari notifikasi yang di-tap saat terminated
+    RemoteMessage? initialMessage =
+        await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      print('App opened from a terminated state via FCM message!');
+      print('Initial message data: ${initialMessage.data}');
+      _handleNavigationFromNotification(initialMessage.data);
+    }
+  }
 
   Future<List<Map<String, dynamic>>> getRankKampus() async {
     try {
@@ -339,6 +573,16 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.notifications, color: Colors.white),
+          tooltip: 'Notifikasi',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const NotifikasiPage()),
+            );
+          },
+        ),
         centerTitle: true,
         title: Image.asset(
           'assets/logofinblood/logofinblood.png',

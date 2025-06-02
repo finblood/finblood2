@@ -20,6 +20,7 @@ Finblood adalah aplikasi mobile untuk memudahkan pencarian dan pendaftaran pendo
 - **Peringkat Kampus**: Lihat statistik jumlah pendonor dari setiap kampus
 - **Kontak Langsung**: Hubungi pendonor langsung melalui nomor telepon
 - **Carousel Slide**: Menampilkan carousel slide yang dapat diatur secara dinamis melalui backend atau pengaturan admin. Setiap slide memiliki konten visual (gambar atau teks) dan aksi yang dapat disesuaikan
+- **Notifikasi Pendonor Baru**: Mengirimkan push notifikasi ke pengguna setiap ada pendonor baru
 
 ## Screenshot
 
@@ -36,9 +37,10 @@ Finblood adalah aplikasi mobile untuk memudahkan pencarian dan pendaftaran pendo
 ## Teknologi
 
 - **Frontend**: Flutter
-- **Backend**: Firebase (Authentication, Firestore, Cloud Functions)
+- **Backend**: Firebase (Authentication, Firestore, Cloud Functions, Cloud Messaging)
 - **Penyimpanan Data**: Cloud Firestore
 - **Autentikasi**: Firebase Authentication
+- **Notifikasi**: Firebase Cloud Messaging (FCM)
 - **Pengelolaan Status**: Shared Preferences
 
 ## Prasyarat
@@ -98,6 +100,7 @@ Finblood adalah aplikasi mobile untuk memudahkan pencarian dan pendaftaran pendo
 Aplikasi ini menggunakan Cloud Functions untuk:
 - Verifikasi email pengguna
 - Menghapus akun pengguna saat terjadi kegagalan pendaftaran
+- Mengirim push notification ke semua pengguna setiap ada pendonor baru (otomatis via FCM & Cloud Functions)
 
 ## Pengembangan Lebih Lanjut
 
