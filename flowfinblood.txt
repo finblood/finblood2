@@ -1,0 +1,88 @@
+============================
+ALUR FITUR APLIKASI FINBLOOD (SEBAGAI USER)
+============================
+
+1. **Onboarding & Autentikasi**
+   - User pertama kali membuka aplikasi, melihat onboarding (intro singkat).
+   - User diarahkan ke halaman login/daftar.
+   - User dapat mendaftar akun baru (dengan email, nama, password).
+   - Setelah mendaftar, user akan menerima email verifikasi. User harus memverifikasi email sebelum bisa login dan menggunakan aplikasi.
+   - User dapat login setelah email terverifikasi.
+   - Jika lupa password, user dapat memilih "Lupa Password" di halaman login untuk mengatur ulang password melalui email.
+
+2. **Beranda (HomePage)**
+   - Setelah login, user masuk ke halaman utama.
+   - Terdapat carousel/banner informasi (bisa di-tap untuk aksi/link tertentu).
+   - Terdapat tombol untuk melihat daftar pendonor dan tombol untuk mendaftar sebagai pendonor.
+   - Terdapat ranking kampus berdasarkan jumlah pendonor.
+   - Terdapat icon notifikasi di pojok kiri atas untuk melihat daftar notifikasi pendonor baru.
+   - Terdapat icon Logout di pojok kanan atas agar user dapat keluar dari aplikasi
+
+3. **Daftar Menjadi Pendonor**
+   - User mengisi form: nama, nomor HP, kampus, golongan darah.
+   - Setelah submit, data user masuk ke database `pendonor`.
+   - User akan muncul di daftar pendonor dan dapat dihubungi oleh user lain.
+   - User dapat menghapus data pendonor miliknya sendiri.
+
+4. **Daftar Pendonor**
+   - User dapat melihat daftar semua pendonor yang sudah mendaftar.
+   - Bisa filter berdasarkan kampus dan golongan darah.
+   - Setiap pendonor bisa dihubungi langsung via tombol telepon.
+
+5. **Notifikasi Pendonor Baru**
+   - Setiap kali ada pendonor baru, semua user akan menerima push notification (FCM).
+   - User dapat membuka halaman notifikasi untuk melihat daftar pendonor baru secara real-time.
+   - Notifikasi tampil dengan style card dan info lengkap pendonor baru.
+
+6. **Reset Password**
+   - Jika user lupa password, dapat memilih "Lupa Password" di halaman login untuk mengatur ulang password melalui email.
+
+7. **Logout**
+   - User dapat logout dari aplikasi melalui tombol di pojok kanan atas.
+
+
+============================
+ALUR SISTEM/BACKEND FINBLOOD
+============================
+
+1. **Firebase Authentication**
+   - Menangani pendaftaran, login, verifikasi email, dan reset password.
+   - Cloud Function mengirim email verifikasi saat user mendaftar.
+   - Firebase Auth mengirim email reset password jika user melakukan permintaan reset.
+
+2. **Cloud Firestore**
+   - Menyimpan data user di koleksi `users`.
+   - Menyimpan data pendonor di koleksi `pendonor`.
+   - Menyimpan data carousel di `carousel_images` dan metadata di `carousel_metadata`.
+
+3. **Cloud Functions**
+   - Trigger onCreate pada `users`: mengirim email verifikasi ke user baru.
+   - Trigger onCreate pada `pendonor`: mengirim push notification ke topik FCM `pendonor_baru` (isi: info pendonor baru).
+   - Trigger onUpdate pada `users`: mengirim ulang email verifikasi jika diminta.
+   - Endpoint untuk menghapus user dari Auth & Firestore jika pendaftaran gagal.
+   - Menulis dokumen ke koleksi `mail` untuk proses email (verifikasi, dsb).
+
+4. **Firebase Cloud Messaging (FCM)**
+   - Semua device subscribe ke topik `pendonor_baru` saat login/pertama kali masuk aplikasi.
+   - Setiap ada pendonor baru, Cloud Function mengirim FCM ke topik tersebut.
+   - Aplikasi menerima FCM dan menampilkan push notification.
+
+5. **Aplikasi Flutter**
+   - Menggunakan StreamBuilder untuk update real-time daftar pendonor dan notifikasi.
+   - Mengambil data carousel dan ranking kampus dari Firestore.
+   - Mengelola status login, cache, dan preferensi user dengan SharedPreferences.
+   - Menangani navigasi, tampilan, dan aksi user secara responsif.
+
+6. **Keamanan & Validasi**
+   - Validasi input user di form pendaftaran dan daftar pendonor.
+   - Hanya user yang sudah verifikasi email yang bisa login dan mengakses fitur utama.
+   - Data sensitif (password, email) hanya dikelola oleh Firebase Auth.
+
+7. **Pengelolaan Data**
+   - Data pendonor yang dihapus oleh user akan dihapus dari Firestore.
+   - Data carousel dapat diupdate oleh admin melalui backend/Console Firebase.
+   - Koleksi `mail` hanya digunakan internal oleh Cloud Functions untuk email.
+
+============================
+END OF FLOW
+============================ 
