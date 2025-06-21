@@ -334,6 +334,7 @@ class _RegisterPageState extends State<RegisterPage> {
           'registrationCompleted': true,
           'registrationMethod': 'email',
           'lastLoginAt': FieldValue.serverTimestamp(),
+          'role': 'user', // Default role sebagai user biasa
         };
 
         await FirebaseFirestore.instance

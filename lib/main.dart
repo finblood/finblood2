@@ -14,11 +14,14 @@ import 'package:dropdown_button2/dropdown_button2.dart';
 import 'dart:convert'; // For jsonEncode and jsonDecode
 import 'package:cached_network_image/cached_network_image.dart'; // Added for CachedNetworkImage
 import 'package:flutter_cache_manager/flutter_cache_manager.dart'; // Added for DefaultCacheManager
-import 'package:flutter/services.dart'; // Added for SystemUiOverlayStyle and AnnotatedRegion
 // Impor untuk notifikasi
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; // Impor FCM
 import 'notifikasi_page.dart'; // Impor halaman notifikasi
+import 'admin_utils.dart'; // Impor admin utilities
+import 'admin_search_donor.dart';
+import 'detail_pendonor_page.dart'; // Impor halaman detail pendonor
+import 'riwayat_donor_page.dart'; // Impor halaman riwayat donor
 
 // Fungsi top-level untuk menangani tap notifikasi di background
 @pragma('vm:entry-point')
@@ -823,37 +826,121 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                SizedBox(
-                  width: 272,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const DaftarPendonorPage(),
+                // Tombol dinamis berdasarkan role user
+                FutureBuilder<bool>(
+                  future: AdminUtils.isCurrentUserAdmin(),
+                  builder: (context, snapshot) {
+                    final isAdmin = snapshot.data ?? false;
+
+                    return SizedBox(
+                      width: 272,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          if (isAdmin) {
+                            // Navigasi ke halaman Cari Pendonor untuk admin
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => const AdminSearchDonorPage(),
+                              ),
+                            );
+                          } else {
+                            // Navigasi ke halaman Daftar Pendonor untuk user biasa
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => const DaftarPendonorPage(),
+                              ),
+                            );
+                          }
+                        },
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child:
+                              isAdmin
+                                  ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.search, color: Colors.white),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Cari Pendonor',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                  : Text(
+                                    'Daftar Menjadi Pendonor',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
                         ),
-                      );
-                    },
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: const Text(
-                        'Daftar Menjadi Pendonor',
-                        style: TextStyle(fontWeight: FontWeight.w500),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(272, 51),
+                          textStyle: const TextStyle(
+                            fontSize: 18,
+                            fontFamily: 'Poppins',
+                          ),
+                          backgroundColor: const Color(
+                            0xFFCA4A63,
+                          ), // Merah untuk semua user
+                          foregroundColor: Colors.white,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(50)),
+                          ),
+                        ),
                       ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(272, 51),
-                      textStyle: const TextStyle(
-                        fontSize: 18,
-                        fontFamily: 'Poppins',
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+                // Tombol Riwayat Donor - hanya untuk user biasa
+                FutureBuilder<bool>(
+                  future: AdminUtils.isCurrentUserAdmin(),
+                  builder: (context, snapshot) {
+                    final isAdmin = snapshot.data ?? false;
+
+                    // Hanya tampilkan tombol jika bukan admin
+                    if (isAdmin) {
+                      return const SizedBox.shrink(); // Sembunyikan jika admin
+                    }
+
+                    return SizedBox(
+                      width: 272,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          // Navigasi ke halaman riwayat donor
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const RiwayatDonorPage(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Riwayat Donor',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(272, 51),
+                          textStyle: const TextStyle(
+                            fontSize: 18,
+                            fontFamily: 'Poppins',
+                          ),
+                          backgroundColor: const Color(0xFFCA4A63),
+                          foregroundColor: Colors.white,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(50)),
+                          ),
+                        ),
                       ),
-                      backgroundColor: const Color(0xFFCA4A63),
-                      foregroundColor: Colors.white,
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(50)),
-                      ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -917,7 +1004,12 @@ class _HomePageState extends State<HomePage> {
                           const Center(
                             child: Text(
                               'Belum ada pendonor.',
-                              style: TextStyle(fontFamily: 'Poppins'),
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF757575),
+                                fontFamily: 'Poppins',
+                              ),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -1534,6 +1626,8 @@ class DaftarPendonorListPage extends StatefulWidget {
 class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
   String _filterKampus = '__ALL__';
   String _filterGolongan = '__ALL__';
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   final List<String> kampusList = [
     'Universitas Udayana',
@@ -1558,6 +1652,12 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
   ];
 
   final List<String> golonganList = ['A', 'B', 'O', 'AB'];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   // Fungsi untuk memanggil nomor telepon
   Future<void> _makePhoneCall(String phoneNumber) async {
@@ -1815,6 +1915,83 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
+
+                  // Search field - only for admin users
+                  FutureBuilder<bool>(
+                    future: AdminUtils.isCurrentUserAdmin(),
+                    builder: (context, snapshot) {
+                      final isAdmin = snapshot.data ?? false;
+                      if (!isAdmin) return const SizedBox.shrink();
+
+                      return Column(
+                        children: [
+                          TextFormField(
+                            controller: _searchController,
+                            onChanged: (value) {
+                              setState(() {
+                                _searchQuery = value.toLowerCase();
+                              });
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Cari Nama Pendonor',
+                              hintText: 'Masukkan nama pendonor...',
+                              prefixIcon: const Icon(
+                                Icons.search,
+                                color: Color(0xFF6C1022),
+                              ),
+                              suffixIcon:
+                                  _searchQuery.isNotEmpty
+                                      ? IconButton(
+                                        icon: const Icon(
+                                          Icons.clear,
+                                          color: Color(0xFF6C1022),
+                                        ),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          setState(() {
+                                            _searchQuery = '';
+                                          });
+                                        },
+                                      )
+                                      : null,
+                              labelStyle: const TextStyle(
+                                color: Color(0xFF6C1022),
+                                fontFamily: 'Poppins',
+                              ),
+                              hintStyle: const TextStyle(
+                                color: Colors.grey,
+                                fontFamily: 'Poppins',
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: const BorderRadius.all(
+                                  Radius.circular(15),
+                                ),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF6C1022),
+                                  width: 2.0,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: const BorderRadius.all(
+                                  Radius.circular(15),
+                                ),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF6C1022),
+                                  width: 2.5,
+                                ),
+                              ),
+                            ),
+                            style: const TextStyle(
+                              color: Color(0xFF6C1022),
+                              fontFamily: 'Poppins',
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      );
+                    },
+                  ),
+
                   const Text(
                     'Pendonor',
                     style: TextStyle(
@@ -1867,6 +2044,17 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
                                   )
                                   .toList();
                         }
+                        // Filter berdasarkan nama (untuk admin)
+                        if (_searchQuery.isNotEmpty) {
+                          docs =
+                              docs.where((doc) {
+                                final nama =
+                                    (doc['nama'] ?? '')
+                                        .toString()
+                                        .toLowerCase();
+                                return nama.contains(_searchQuery);
+                              }).toList();
+                        }
                         if (docs.isEmpty) {
                           return Padding(
                             padding: const EdgeInsets.only(top: 60.0),
@@ -1885,7 +2073,12 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
                                 const Center(
                                   child: Text(
                                     'Belum ada pendonor',
-                                    style: TextStyle(fontFamily: 'Poppins'),
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF757575),
+                                      fontFamily: 'Poppins',
+                                    ),
                                     textAlign: TextAlign.center,
                                   ),
                                 ),
@@ -1900,94 +2093,114 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
                           itemBuilder: (context, i) {
                             final data = docs[i].data();
                             final String nomorHP = data['nomor_hp'] ?? '-';
-                            return Card(
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                    colors: [
-                                      Color(0xFF6C1022),
-                                      Color(0xFFD21F42),
-                                    ],
+                            final String docId = docs[i].id;
+
+                            return InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => DetailPendonorPage(
+                                          donorData: data,
+                                          donorId: docId,
+                                        ),
                                   ),
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(15),
+                              child: Card(
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                elevation: 2,
+                                shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(15),
                                 ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 13,
-                                    horizontal: 16.0,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                      colors: [
+                                        Color(0xFF6C1022),
+                                        Color(0xFFD21F42),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(15),
                                   ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            RichText(
-                                              text: TextSpan(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 13,
+                                      horizontal: 16.0,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              RichText(
+                                                text: TextSpan(
+                                                  style: const TextStyle(
+                                                    fontSize: 18,
+                                                    color: Colors.white,
+                                                    fontFamily: 'Poppins',
+                                                  ),
+                                                  children: [
+                                                    TextSpan(
+                                                      text:
+                                                          (data['nama'] ??
+                                                              '-') +
+                                                          ' - ',
+                                                      style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: Colors.white,
+                                                        fontFamily: 'Poppins',
+                                                      ),
+                                                    ),
+                                                    TextSpan(
+                                                      text:
+                                                          data['golongan_darah'] ??
+                                                          '-',
+                                                      style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: Colors.white,
+                                                        fontFamily: 'Poppins',
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              const SizedBox(height: 0),
+                                              Text(
+                                                data['kampus'] ?? '-',
                                                 style: const TextStyle(
-                                                  fontSize: 18,
+                                                  fontSize: 16,
                                                   color: Colors.white,
                                                   fontFamily: 'Poppins',
                                                 ),
-                                                children: [
-                                                  TextSpan(
-                                                    text:
-                                                        (data['nama'] ?? '-') +
-                                                        ' - ',
-                                                    style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: Colors.white,
-                                                      fontFamily: 'Poppins',
-                                                    ),
-                                                  ),
-                                                  TextSpan(
-                                                    text:
-                                                        data['golongan_darah'] ??
-                                                        '-',
-                                                    style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: Colors.white,
-                                                      fontFamily: 'Poppins',
-                                                    ),
-                                                  ),
-                                                ],
                                               ),
-                                            ),
-                                            const SizedBox(height: 0),
-                                            Text(
-                                              data['kampus'] ?? '-',
-                                              style: const TextStyle(
-                                                fontSize: 16,
-                                                color: Colors.white,
-                                                fontFamily: 'Poppins',
-                                              ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                      // Tombol telepon
-                                      nomorHP != '-'
-                                          ? IconButton(
-                                            icon: const Icon(
-                                              Icons.phone,
-                                              color: Colors.white,
-                                              size: 28,
-                                            ),
-                                            onPressed:
-                                                () => _makePhoneCall(nomorHP),
-                                          )
-                                          : const SizedBox.shrink(),
-                                    ],
+                                        // Tombol telepon
+                                        nomorHP != '-'
+                                            ? IconButton(
+                                              icon: const Icon(
+                                                Icons.phone,
+                                                color: Colors.white,
+                                                size: 28,
+                                              ),
+                                              onPressed:
+                                                  () => _makePhoneCall(nomorHP),
+                                            )
+                                            : const SizedBox.shrink(),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -2627,6 +2840,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
             const SizedBox(height: 4),
             DropdownButtonFormField2<String>(
               value: _selectedKampus,
+              isExpanded: true,
               items:
                   kampusList
                       .map(
@@ -2639,6 +2853,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                               fontWeight: FontWeight.w600,
                               fontFamily: 'Poppins',
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       )
@@ -2705,6 +2920,7 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
             const SizedBox(height: 4),
             DropdownButtonFormField2<String>(
               value: _selectedGolongan,
+              isExpanded: true,
               items:
                   golonganList
                       .map(

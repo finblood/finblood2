@@ -387,10 +387,20 @@ class _LoginPageState extends State<LoginPage> {
               Map<String, dynamic> userData =
                   userDoc.data() as Map<String, dynamic>;
               String userName = userData['nama'] ?? '';
+              String userRole =
+                  userData['role'] ?? 'user'; // Default to 'user' if no role
+
               // Simpan nama pengguna ke SharedPreferences untuk persistensi
               await prefs.setString('userName', userName);
+              await prefs.setString(
+                'userRole',
+                userRole,
+              ); // Simpan role pengguna
               print(
                 '[LOGIN] Nama pengguna disimpan ke SharedPreferences: $userName',
+              );
+              print(
+                '[LOGIN] Role pengguna disimpan ke SharedPreferences: $userRole',
               );
 
               // Perbarui Firebase Auth displayName jika kosong atau berbeda
