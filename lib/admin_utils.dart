@@ -1,28 +1,155 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AdminUtils {
-  // Check if current user is admin
-  static Future<bool> isCurrentUserAdmin() async {
+  // In-memory cache
+  static bool? _cachedAdminStatus;
+  static String? _cachedUserId;
+
+  // SharedPreferences keys
+  static const String _adminRoleKey = 'is_admin_role';
+  static const String _userIdKey = 'cached_user_id';
+
+  // Check if current user is admin with caching
+  static Future<bool> isCurrentUserAdmin({bool useCache = true}) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      final userDoc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
-
-      if (userDoc.exists) {
-        final userData = userDoc.data() as Map<String, dynamic>;
-        return userData['role'] == 'admin';
+      if (user == null) {
+        _clearInMemoryCache();
+        return false;
       }
-      return false;
+
+      // Return in-memory cache if available and valid
+      if (useCache && _cachedAdminStatus != null && _cachedUserId == user.uid) {
+        return _cachedAdminStatus!;
+      }
+
+      // Try SharedPreferences cache first
+      if (useCache) {
+        final cachedRole = await _getCachedRole(user.uid);
+        if (cachedRole != null) {
+          _cachedAdminStatus = cachedRole;
+          _cachedUserId = user.uid;
+
+          // Verify in background without blocking UI
+          _verifyRoleInBackground(user.uid);
+
+          return cachedRole;
+        }
+      }
+
+      // Fresh query to Firestore
+      return await _queryAdminRole(user.uid);
     } catch (e) {
       print('Error checking admin status: $e');
       return false;
     }
+  }
+
+  // Query admin role from Firestore and cache result
+  static Future<bool> _queryAdminRole(String userId) async {
+    try {
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .get();
+
+      bool isAdmin = false;
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        isAdmin = userData['role'] == 'admin';
+      }
+
+      // Cache the result
+      _cachedAdminStatus = isAdmin;
+      _cachedUserId = userId;
+      await _cacheRole(userId, isAdmin);
+
+      return isAdmin;
+    } catch (e) {
+      print('Error querying admin role: $e');
+      return false;
+    }
+  }
+
+  // Background verification without blocking UI
+  static void _verifyRoleInBackground(String userId) async {
+    try {
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .get();
+
+      bool actualRole = false;
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        actualRole = userData['role'] == 'admin';
+      }
+
+      // Update cache if there's a difference
+      if (_cachedAdminStatus != actualRole) {
+        _cachedAdminStatus = actualRole;
+        await _cacheRole(userId, actualRole);
+      }
+    } catch (e) {
+      print('Background role verification failed: $e');
+    }
+  }
+
+  // Cache role in SharedPreferences
+  static Future<void> _cacheRole(String userId, bool isAdmin) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_userIdKey, userId);
+      await prefs.setBool(_adminRoleKey, isAdmin);
+    } catch (e) {
+      print('Error caching role: $e');
+    }
+  }
+
+  // Get cached role from SharedPreferences
+  static Future<bool?> _getCachedRole(String currentUserId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedUserId = prefs.getString(_userIdKey);
+
+      // Validate if cache is for the same user
+      if (cachedUserId != currentUserId) {
+        await _clearCache();
+        return null;
+      }
+
+      return prefs.getBool(_adminRoleKey);
+    } catch (e) {
+      print('Error getting cached role: $e');
+      return null;
+    }
+  }
+
+  // Clear all caches
+  static Future<void> _clearCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_adminRoleKey);
+      await prefs.remove(_userIdKey);
+    } catch (e) {
+      print('Error clearing cache: $e');
+    }
+  }
+
+  // Clear in-memory cache
+  static void _clearInMemoryCache() {
+    _cachedAdminStatus = null;
+    _cachedUserId = null;
+  }
+
+  // Clear all caches (public method)
+  static Future<void> clearCache() async {
+    _clearInMemoryCache();
+    await _clearCache();
   }
 
   // Check if specific user is admin by UID

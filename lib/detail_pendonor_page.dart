@@ -57,7 +57,7 @@ class DetailPendonorPage extends StatelessWidget {
         return 'Format tanggal tidak valid';
       }
 
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     } catch (e) {
       return 'Format tanggal tidak valid';
     }
@@ -75,12 +75,14 @@ class DetailPendonorPage extends StatelessWidget {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: const Text(
-                'Tambah Riwayat Donor',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF6C1022),
-                  fontFamily: 'Poppins',
+              title: const Center(
+                child: Text(
+                  'Tambah Riwayat Donor',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF6C1022),
+                    fontSize: 20,
+                  ),
                 ),
               ),
               content: SingleChildScrollView(
@@ -196,10 +198,10 @@ class DetailPendonorPage extends StatelessWidget {
                   onPressed: () => Navigator.of(context).pop(false),
                   child: const Text(
                     'Batal',
-                    style: TextStyle(color: Colors.grey, fontFamily: 'Poppins'),
+                    style: TextStyle(color: Color(0xFF6C1022)),
                   ),
                 ),
-                ElevatedButton(
+                TextButton(
                   onPressed: () async {
                     if (locationController.text.trim().isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -212,16 +214,12 @@ class DetailPendonorPage extends StatelessWidget {
                     }
                     Navigator.of(context).pop(true);
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6C1022),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
                   child: const Text(
                     'Simpan',
-                    style: TextStyle(fontFamily: 'Poppins'),
+                    style: TextStyle(
+                      color: Color(0xFF6C1022),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -281,12 +279,14 @@ class DetailPendonorPage extends StatelessWidget {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text(
-              'Hapus Riwayat',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF6C1022),
-                fontFamily: 'Poppins',
+            title: const Center(
+              child: Text(
+                'Konfirmasi Hapus',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6C1022),
+                  fontSize: 20,
+                ),
               ),
             ),
             content: const Text(
@@ -298,18 +298,17 @@ class DetailPendonorPage extends StatelessWidget {
                 onPressed: () => Navigator.of(context).pop(false),
                 child: const Text(
                   'Batal',
-                  style: TextStyle(color: Colors.grey, fontFamily: 'Poppins'),
+                  style: TextStyle(color: Color(0xFF6C1022)),
                 ),
               ),
-              ElevatedButton(
+              TextButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                ),
                 child: const Text(
                   'Hapus',
-                  style: TextStyle(fontFamily: 'Poppins'),
+                  style: TextStyle(
+                    color: Color(0xFF6C1022),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -354,7 +353,6 @@ class DetailPendonorPage extends StatelessWidget {
     final String kampus = donorData['kampus'] ?? 'Tidak diketahui';
     final String golonganDarah =
         donorData['golongan_darah'] ?? 'Tidak diketahui';
-    final String userId = donorData['user_id'] ?? 'Tidak diketahui';
     final dynamic timestamp = donorData['timestamp'];
 
     return Scaffold(
@@ -393,73 +391,12 @@ class DetailPendonorPage extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.all(20.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Header dengan nama dan golongan darah
-                  Center(
-                    child: Card(
-                      elevation: 4,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            colors: [Color(0xFF6C1022), Color(0xFFD21F42)],
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Column(
-                          children: [
-                            const Icon(
-                              Icons.person,
-                              size: 60,
-                              color: Colors.white,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              nama,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Poppins',
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                'Golongan Darah: $golonganDarah',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Poppins',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 5),
 
                   // Detail informasi
                   Card(
@@ -467,42 +404,49 @@ class DetailPendonorPage extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(15),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Informasi Detail',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF6C1022),
-                              fontFamily: 'Poppins',
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [Color(0xFF6C1022), Color(0xFFD21F42)],
+                        ),
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Informasi Detail',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                fontFamily: 'Poppins',
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 16),
+                            const SizedBox(height: 16),
 
-                          _buildDetailRow('Nama Lengkap', nama),
-                          const SizedBox(height: 12),
+                            _buildDetailRow('Nama Lengkap', nama),
+                            const SizedBox(height: 12),
 
-                          _buildDetailRow('Nomor HP', nomorHP),
-                          const SizedBox(height: 12),
+                            _buildDetailRow('Nomor HP', nomorHP),
+                            const SizedBox(height: 12),
 
-                          _buildDetailRow('Kampus', kampus),
-                          const SizedBox(height: 12),
+                            _buildDetailRow('Kampus', kampus),
+                            const SizedBox(height: 12),
 
-                          _buildDetailRow('Golongan Darah', golonganDarah),
-                          const SizedBox(height: 12),
+                            _buildDetailRow('Golongan Darah', golonganDarah),
+                            const SizedBox(height: 12),
 
-                          _buildDetailRow(
-                            'Tanggal Daftar',
-                            _formatTimestamp(timestamp),
-                          ),
-                          const SizedBox(height: 12),
-
-                          _buildDetailRow('ID Pendonor', donorId),
-                        ],
+                            _buildDetailRow(
+                              'Tanggal Daftar',
+                              _formatTimestamp(timestamp),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -513,36 +457,37 @@ class DetailPendonorPage extends StatelessWidget {
                   if (nomorHP != '-' && nomorHP.isNotEmpty)
                     Center(
                       child: SizedBox(
-                        width: double.infinity,
-                        height: 56,
+                        width: 272,
                         child: ElevatedButton.icon(
                           onPressed: () => _makePhoneCall(nomorHP, context),
                           icon: const Icon(
                             Icons.phone,
                             color: Colors.white,
-                            size: 24,
+                            size: 20,
                           ),
                           label: Text(
                             'Hubungi $nama',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'Poppins',
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
                           style: ElevatedButton.styleFrom(
+                            minimumSize: const Size(272, 51),
+                            textStyle: const TextStyle(
+                              fontSize: 18,
+                              fontFamily: 'Poppins',
+                            ),
                             backgroundColor: const Color(0xFF6C1022),
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(15),
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(50),
+                              ),
                             ),
-                            elevation: 3,
                           ),
                         ),
                       ),
                     ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 5),
 
                   // Riwayat Donor Section
                   _buildDonationHistorySection(),
@@ -566,7 +511,7 @@ class DetailPendonorPage extends StatelessWidget {
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF6C1022),
+              color: Colors.white,
               fontFamily: 'Poppins',
             ),
           ),
@@ -576,7 +521,7 @@ class DetailPendonorPage extends StatelessWidget {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF6C1022),
+            color: Colors.white,
             fontFamily: 'Poppins',
           ),
         ),
@@ -585,7 +530,7 @@ class DetailPendonorPage extends StatelessWidget {
             value,
             style: const TextStyle(
               fontSize: 16,
-              color: Colors.black87,
+              color: Colors.white,
               fontFamily: 'Poppins',
             ),
           ),
@@ -596,153 +541,144 @@ class DetailPendonorPage extends StatelessWidget {
 
   // Widget untuk section riwayat donor
   Widget _buildDonationHistorySection() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Riwayat Donor',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF6C1022),
-                    fontFamily: 'Poppins',
-                  ),
-                ),
-                // Tombol tambah riwayat (hanya untuk admin)
-                FutureBuilder<bool>(
-                  future: AdminUtils.isCurrentUserAdmin(),
-                  builder: (context, snapshot) {
-                    final isAdmin = snapshot.data ?? false;
-                    if (!isAdmin) return const SizedBox.shrink();
-
-                    return IconButton(
-                      onPressed: () => _addDonationHistory(context),
-                      icon: const Icon(
-                        Icons.add_circle,
-                        color: Color(0xFF6C1022),
-                        size: 28,
-                      ),
-                      tooltip: 'Tambah Riwayat Donor',
-                    );
-                  },
-                ),
-              ],
+            const Text(
+              'Riwayat Donor',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Colors.black,
+                fontFamily: 'Poppins',
+              ),
             ),
-            const SizedBox(height: 16),
-
-            // StreamBuilder untuk riwayat donor
-            StreamBuilder<QuerySnapshot>(
-              stream:
-                  FirebaseFirestore.instance
-                      .collection('pendonor')
-                      .doc(donorId)
-                      .collection('riwayat_donor')
-                      .orderBy('tanggal_donor', descending: true)
-                      .snapshots(),
+            // Tombol tambah riwayat (hanya untuk admin)
+            FutureBuilder<bool>(
+              future: AdminUtils.isCurrentUserAdmin(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20.0),
-                      child: CircularProgressIndicator(
-                        color: Color(0xFF6C1022),
-                      ),
-                    ),
-                  );
-                }
+                final isAdmin = snapshot.data ?? false;
+                if (!isAdmin) return const SizedBox.shrink();
 
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Text(
-                        'Error: ${snapshot.error}',
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontFamily: 'Poppins',
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                final docs = snapshot.data?.docs ?? [];
-
-                if (docs.isEmpty) {
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.bloodtype_outlined,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Belum ada riwayat donor',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                            fontFamily: 'Poppins',
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        FutureBuilder<bool>(
-                          future: AdminUtils.isCurrentUserAdmin(),
-                          builder: (context, snapshot) {
-                            final isAdmin = snapshot.data ?? false;
-                            if (!isAdmin) return const SizedBox.shrink();
-
-                            return Text(
-                              'Klik tombol + untuk menambah riwayat donor',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[500],
-                                fontFamily: 'Poppins',
-                              ),
-                              textAlign: TextAlign.center,
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return Column(
-                  children:
-                      docs.map((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        final tanggalDonor =
-                            data['tanggal_donor'] as Timestamp?;
-                        final lokasi =
-                            data['lokasi'] ?? 'Lokasi tidak diketahui';
-                        final catatan = data['catatan'] ?? '';
-
-                        return _buildDonationHistoryCard(
-                          doc.id,
-                          tanggalDonor,
-                          lokasi,
-                          catatan,
-                        );
-                      }).toList(),
+                return IconButton(
+                  onPressed: () => _addDonationHistory(context),
+                  icon: const Icon(
+                    Icons.add_circle,
+                    color: Color(0xFF6C1022),
+                    size: 28,
+                  ),
+                  tooltip: 'Tambah Riwayat Donor',
                 );
               },
             ),
           ],
         ),
-      ),
+        const SizedBox(height: 5),
+
+        // StreamBuilder untuk riwayat donor
+        StreamBuilder<QuerySnapshot>(
+          stream:
+              FirebaseFirestore.instance
+                  .collection('pendonor')
+                  .doc(donorId)
+                  .collection('riwayat_donor')
+                  .orderBy('tanggal_donor', descending: true)
+                  .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: CircularProgressIndicator(color: Color(0xFF6C1022)),
+                ),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Text(
+                    'Error: ${snapshot.error}',
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            final docs = snapshot.data?.docs ?? [];
+
+            if (docs.isEmpty) {
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.bloodtype_outlined,
+                      size: 64,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Belum ada riwayat donor',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF757575),
+                        fontFamily: 'Poppins',
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    FutureBuilder<bool>(
+                      future: AdminUtils.isCurrentUserAdmin(),
+                      builder: (context, snapshot) {
+                        final isAdmin = snapshot.data ?? false;
+                        if (!isAdmin) return const SizedBox.shrink();
+
+                        return const Text(
+                          'Klik tombol + untuk menambah riwayat donor',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: Color(0xFF999999),
+                            fontFamily: 'Poppins',
+                          ),
+                          textAlign: TextAlign.center,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return Column(
+              children:
+                  docs.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final tanggalDonor = data['tanggal_donor'] as Timestamp?;
+                    final lokasi = data['lokasi'] ?? 'Lokasi tidak diketahui';
+                    final catatan = data['catatan'] ?? '';
+
+                    return _buildDonationHistoryCard(
+                      doc.id,
+                      tanggalDonor,
+                      lokasi,
+                      catatan,
+                    );
+                  }).toList(),
+            );
+          },
+        ),
+      ],
     );
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:dropdown_button2/dropdown_button2.dart';
 
 class RiwayatDonorPage extends StatefulWidget {
   const RiwayatDonorPage({super.key});
@@ -12,6 +13,7 @@ class RiwayatDonorPage extends StatefulWidget {
 class _RiwayatDonorPageState extends State<RiwayatDonorPage> {
   String? _currentUserDonorId;
   bool _isLoadingDonorId = true;
+  int? _selectedYear; // Filter tahun yang dipilih
 
   @override
   void initState() {
@@ -164,78 +166,74 @@ class _RiwayatDonorPageState extends State<RiwayatDonorPage> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset(
-              'assets/images/listempty.png',
-              height: 150,
-              fit: BoxFit.contain,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Image.asset(
+            'assets/images/emptybw.png',
+            height: 120,
+            fit: BoxFit.contain,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Belum ada riwayat donor',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF757575),
+              fontFamily: 'Poppins',
             ),
-            const SizedBox(height: 24),
-            Text(
-              'Anda belum memiliki riwayat donor darah',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[600],
-                fontFamily: 'Poppins',
-              ),
-              textAlign: TextAlign.center,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Riwayat donor Anda akan muncul di sini\nsetelah admin menambahkannya.',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+              color: Color(0xFF999999),
+              fontFamily: 'Poppins',
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Silahkan lakukan donor darah terlebih dahulu untuk melihat riwayat donor',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[500],
-                fontFamily: 'Poppins',
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildNotRegisteredState() {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset(
-              'assets/images/listempty.png',
-              height: 150,
-              fit: BoxFit.contain,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Image.asset(
+            'assets/images/emptybw.png',
+            height: 120,
+            fit: BoxFit.contain,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Anda belum memiliki riwayat donor darah',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF757575),
+              fontFamily: 'Poppins',
             ),
-            const SizedBox(height: 24),
-            Text(
-              'Anda belum memiliki riwayat donor darah',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[600],
-                fontFamily: 'Poppins',
-              ),
-              textAlign: TextAlign.center,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Silahkan lakukan donor darah terlebih dahulu untuk melihat riwayat donor',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+              color: Color(0xFF999999),
+              fontFamily: 'Poppins',
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Silahkan lakukan donor darah terlebih dahulu untuk melihat riwayat donor',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[500],
-                fontFamily: 'Poppins',
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
@@ -298,7 +296,7 @@ class _RiwayatDonorPageState extends State<RiwayatDonorPage> {
                           // Header info
                           Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.all(20),
+                            padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
                               color: const Color(0xFF6C1022).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(15),
@@ -330,6 +328,118 @@ class _RiwayatDonorPageState extends State<RiwayatDonorPage> {
                           ),
 
                           const SizedBox(height: 20),
+
+                          // Year Filter Dropdown
+                          StreamBuilder<QuerySnapshot>(
+                            stream:
+                                FirebaseFirestore.instance
+                                    .collection('pendonor')
+                                    .doc(_currentUserDonorId)
+                                    .collection('riwayat_donor')
+                                    .snapshots(),
+                            builder: (context, yearSnapshot) {
+                              if (!yearSnapshot.hasData ||
+                                  yearSnapshot.data!.docs.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+
+                              // Get available years for dropdown
+                              final Set<int> availableYears = {};
+                              for (var doc in yearSnapshot.data!.docs) {
+                                final data = doc.data() as Map<String, dynamic>;
+                                final tanggalDonor =
+                                    data['tanggal_donor'] as Timestamp?;
+                                if (tanggalDonor != null) {
+                                  availableYears.add(
+                                    tanggalDonor.toDate().year,
+                                  );
+                                }
+                              }
+
+                              final sortedYears =
+                                  availableYears.toList()
+                                    ..sort((a, b) => b.compareTo(a));
+
+                              return Column(
+                                children: [
+                                  DropdownButtonFormField2<int>(
+                                    value: _selectedYear,
+                                    isExpanded: true,
+                                    style: const TextStyle(
+                                      color: Color(0xFF6C1022),
+                                      fontWeight: FontWeight.w600,
+                                      fontFamily: 'Poppins',
+                                    ),
+                                    items: [
+                                      const DropdownMenuItem<int>(
+                                        value: null,
+                                        child: Text(
+                                          'Semua Tahun',
+                                          style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                          ),
+                                        ),
+                                      ),
+                                      ...sortedYears.map(
+                                        (year) => DropdownMenuItem<int>(
+                                          value: year,
+                                          child: Text(
+                                            'Tahun $year',
+                                            style: const TextStyle(
+                                              color: Color(0xFF6C1022),
+                                              fontWeight: FontWeight.w600,
+                                              fontFamily: 'Poppins',
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _selectedYear = val;
+                                      });
+                                    },
+                                    decoration: InputDecoration(
+                                      labelText: 'Filter Tahun',
+                                      labelStyle: const TextStyle(
+                                        color: Color(0xFF6C1022),
+                                        fontFamily: 'Poppins',
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: const BorderRadius.all(
+                                          Radius.circular(15),
+                                        ),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFF6C1022),
+                                          width: 2.0,
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: const BorderRadius.all(
+                                          Radius.circular(15),
+                                        ),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFF6C1022),
+                                          width: 2.5,
+                                        ),
+                                      ),
+                                    ),
+                                    dropdownStyleData: DropdownStyleData(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(15),
+                                      ),
+                                    ),
+                                    menuItemStyleData: const MenuItemStyleData(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+                              );
+                            },
+                          ),
 
                           // List riwayat donor
                           Expanded(
@@ -383,14 +493,29 @@ class _RiwayatDonorPageState extends State<RiwayatDonorPage> {
                                   );
                                 }
 
-                                final docs = snapshot.data?.docs ?? [];
+                                var docs = snapshot.data?.docs ?? [];
+
+                                // Filter berdasarkan tahun yang dipilih
+                                if (_selectedYear != null) {
+                                  docs =
+                                      docs.where((doc) {
+                                        final data =
+                                            doc.data() as Map<String, dynamic>;
+                                        final tanggalDonor =
+                                            data['tanggal_donor'] as Timestamp?;
+                                        if (tanggalDonor != null) {
+                                          return tanggalDonor.toDate().year ==
+                                              _selectedYear;
+                                        }
+                                        return false;
+                                      }).toList();
+                                }
 
                                 if (docs.isEmpty) {
                                   return _buildEmptyState();
                                 }
 
                                 return ListView.builder(
-                                  physics: const BouncingScrollPhysics(),
                                   itemCount: docs.length,
                                   itemBuilder: (context, index) {
                                     final data =

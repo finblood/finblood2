@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'pendonor_bersedia_page.dart';
 
 class AdminSearchDonorPage extends StatefulWidget {
   const AdminSearchDonorPage({super.key});
@@ -56,68 +59,142 @@ class _AdminSearchDonorPageState extends State<AdminSearchDonorPage> {
     }
   }
 
-  void _resetFilters() {
-    setState(() {
-      selectedKampus = null;
-      selectedGolDarah = null;
-    });
-  }
-
   void _showNotificationDialog(int count) {
+    bool isLoading = false;
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text(
-            'Kirim Notifikasi',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Akan mengirim notifikasi ke $count pendonor:'),
-              const SizedBox(height: 8),
-              if (selectedKampus != null) Text('• Kampus: $selectedKampus'),
-              if (selectedGolDarah != null)
-                Text('• Golongan Darah: $selectedGolDarah'),
-              if (selectedKampus == null && selectedGolDarah == null)
-                const Text('• Semua pendonor'),
-              const SizedBox(height: 16),
-              const Text(
-                'Fitur ini masih dalam pengembangan.',
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text(
+                'Kirim Permintaan Donor',
                 style: TextStyle(
-                  fontStyle: FontStyle.italic,
-                  color: Colors.grey,
+                  color: Color(0xFF6C1022),
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Batal'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Notifikasi berhasil dikirim! (Demo)'),
-                    backgroundColor: Colors.green,
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Aplikasi akan mengirim permintaan donor darah ke $count pendonor:',
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6C1022),
-                foregroundColor: Colors.white,
+                  const SizedBox(height: 8),
+                  if (selectedKampus != null) Text('• Kampus: $selectedKampus'),
+                  if (selectedGolDarah != null)
+                    Text('• Golongan Darah: $selectedGolDarah'),
+                  if (selectedKampus == null && selectedGolDarah == null)
+                    const Text('• Semua pendonor'),
+                  const SizedBox(height: 16),
+                  if (isLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 16),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                ],
               ),
-              child: const Text('Kirim'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed:
+                      isLoading ? null : () => Navigator.of(context).pop(),
+                  child: const Text(
+                    'Batal',
+                    style: TextStyle(color: Color(0xFF6C1022)),
+                  ),
+                ),
+                TextButton(
+                  onPressed:
+                      isLoading
+                          ? null
+                          : () async {
+                            setState(() {
+                              isLoading = true;
+                            });
+
+                            try {
+                              await _sendNotificationToBackend(
+                                selectedKampus,
+                                selectedGolDarah,
+                              );
+
+                              if (context.mounted) {
+                                Navigator.of(context).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Permintaan donor berhasil dikirim ke $count pendonor!',
+                                    ),
+                                    backgroundColor: Color(0xFF6C1022),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                setState(() {
+                                  isLoading = false;
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                  child: const Text(
+                    'Kirim Permintaan',
+                    style: TextStyle(
+                      color: Color(0xFF6C1022),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+            );
+          },
         );
       },
     );
+  }
+
+  Future<void> _sendNotificationToBackend(
+    String? kampus,
+    String? golonganDarah,
+  ) async {
+    try {
+      // URL Cloud Function - ganti dengan URL Firebase Functions Anda
+      // Format: https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/sendAdminNotification
+      const String cloudFunctionUrl =
+          'https://us-central1-fin-blood-2.cloudfunctions.net/sendAdminNotification';
+
+      final response = await http.post(
+        Uri.parse(cloudFunctionUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'kampus': kampus,
+          'golonganDarah': golonganDarah,
+          'secretKey': 'finblood-dev-key-2024',
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        print('Donor request sent successfully: $responseData');
+      } else {
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['error'] ?? 'Failed to send donor request');
+      }
+    } catch (e) {
+      print('Error sending donor request: $e');
+      throw Exception('Gagal mengirim permintaan donor: $e');
+    }
   }
 
   // Fungsi untuk memanggil nomor telepon
@@ -362,7 +439,7 @@ class _AdminSearchDonorPageState extends State<AdminSearchDonorPage> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 1),
 
           // Send Notification Button - moved here after filters
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -393,25 +470,90 @@ class _AdminSearchDonorPageState extends State<AdminSearchDonorPage> {
                   horizontal: 16,
                   vertical: 8,
                 ),
-                child: ElevatedButton.icon(
-                  onPressed:
-                      docs.isEmpty
-                          ? null
-                          : () => _showNotificationDialog(docs.length),
-                  icon: const Icon(Icons.notifications_active),
-                  label: Text('Kirim Notifikasi (${docs.length})'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFCA4A63),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                child: Column(
+                  children: [
+                    // Tombol Kirim Permintaan Donor
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed:
+                            docs.isEmpty
+                                ? null
+                                : () => _showNotificationDialog(docs.length),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.notifications, color: Colors.white),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                'Kirim Permintaan Donor (${docs.length})',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 51),
+                          textStyle: const TextStyle(
+                            fontSize: 18,
+                            fontFamily: 'Poppins',
+                          ),
+                          backgroundColor: const Color(0xFFCA4A63),
+                          foregroundColor: Colors.white,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(50)),
+                          ),
+                        ),
+                      ),
                     ),
-                    textStyle: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                    const SizedBox(height: 10),
+                    // Tombol Pendonor Yang Bersedia
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => const PendonorBersediaPage(),
+                            ),
+                          );
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.volunteer_activism, color: Colors.white),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Pendonor Yang Bersedia',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 51),
+                          textStyle: const TextStyle(
+                            fontSize: 18,
+                            fontFamily: 'Poppins',
+                          ),
+                          backgroundColor: const Color(0xFFCA4A63),
+                          foregroundColor: Colors.white,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(50)),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               );
             },
@@ -477,32 +619,28 @@ class _AdminSearchDonorPageState extends State<AdminSearchDonorPage> {
 
                   if (docs.isEmpty) {
                     return Padding(
-                      padding: const EdgeInsets.only(top: 60.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Center(
-                            child: Image.asset(
-                              'assets/images/listempty.png',
-                              height: 150,
+                      padding: const EdgeInsets.only(top: 100),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Image.asset(
+                              'assets/images/emptybw.png',
+                              height: 120,
                               fit: BoxFit.contain,
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Center(
-                            child: Text(
+                            const SizedBox(height: 16),
+                            const Text(
                               'Belum ada pendonor',
                               style: TextStyle(
-                                fontSize: 20,
+                                fontSize: 16,
                                 fontWeight: FontWeight.w600,
                                 color: Color(0xFF757575),
                                 fontFamily: 'Poppins',
                               ),
                               textAlign: TextAlign.center,
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   }

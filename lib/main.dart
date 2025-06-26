@@ -22,6 +22,7 @@ import 'admin_utils.dart'; // Impor admin utilities
 import 'admin_search_donor.dart';
 import 'detail_pendonor_page.dart'; // Impor halaman detail pendonor
 import 'riwayat_donor_page.dart'; // Impor halaman riwayat donor
+import 'konfirmasi_bersedia_page.dart'; // Impor halaman konfirmasi bersedia
 
 // Fungsi top-level untuk menangani tap notifikasi di background
 @pragma('vm:entry-point')
@@ -38,15 +39,26 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // Handler untuk pesan FCM saat aplikasi di background/terminated
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Jika Anda akan menggunakan plugin lain di sini (seperti Firebase.initializeApp), pastikan Flutter sudah terinisialisasi.
-  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform); // Mungkin perlu jika ada inisialisasi Firebase lain di sini
-  print("Handling a background message: ${message.messageId}");
-  print('Message data: ${message.data}');
+  // Ensure Firebase is initialized for background context
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  print(
+    "🔥 [FCM BACKGROUND] Handling a background message: ${message.messageId}",
+  );
+  print('🔥 [FCM BACKGROUND] Message data: ${message.data}');
+  print('🔥 [FCM BACKGROUND] From: ${message.from}');
+  print('🔥 [FCM BACKGROUND] Sent time: ${message.sentTime}');
+
   if (message.notification != null) {
-    print('Message also contained a notification: ${message.notification}');
-    // Di sini kita bisa menampilkan notifikasi lokal jika diperlukan,
-    // tapi biasanya FCM menangani ini untuk background messages di Android.
-    // Untuk iOS, atau jika ingin kustomisasi penuh, Anda bisa tampilkan notifikasi lokal.
+    print('🔥 [FCM BACKGROUND] Message contained notification:');
+    print('🔥 [FCM BACKGROUND] Title: ${message.notification!.title}');
+    print('🔥 [FCM BACKGROUND] Body: ${message.notification!.body}');
+
+    // For background messages, Android handles notification display automatically
+    // but we can log this for debugging
+    print('🔥 [FCM BACKGROUND] System should automatically show notification');
+  } else {
+    print('🔥 [FCM BACKGROUND] ⚠️ Message has no notification payload');
   }
 }
 
@@ -350,44 +362,141 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
-
-  int _unreadCount = 0;
 
   @override
   void initState() {
     super.initState();
+    // Add app lifecycle observer
+    WidgetsBinding.instance.addObserver(this);
     _initializeLocalNotifications();
     _initializeFCM();
-    _getUnreadCount();
   }
 
-  Future<void> _getUnreadCount() async {
-    final prefs = await SharedPreferences.getInstance();
-    final lastOpened = prefs.getInt('last_opened_notifikasi') ?? 0;
-    final snapshot =
-        await FirebaseFirestore.instance
-            .collection('pendonor')
-            .orderBy('timestamp', descending: true)
-            .get();
-    int count = 0;
-    for (var doc in snapshot.docs) {
-      final ts = doc['timestamp'];
-      if (ts is Timestamp && ts.millisecondsSinceEpoch > lastOpened) {
-        count++;
-      }
+  @override
+  void dispose() {
+    // Remove app lifecycle observer
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        print('🟢 App resumed - verifying FCM token...');
+        _verifyTokenOnResume();
+        break;
+      case AppLifecycleState.paused:
+        print('🟡 App paused - saving token state...');
+        _saveTokenStateOnPause();
+        break;
+      case AppLifecycleState.inactive:
+        print('🟠 App inactive');
+        break;
+      case AppLifecycleState.detached:
+        print('🔴 App detached - preserving token...');
+        _preserveTokenOnDetach();
+        break;
+      case AppLifecycleState.hidden:
+        print('🔵 App hidden');
+        break;
     }
-    setState(() {
-      _unreadCount = count;
-    });
+  }
+
+  Future<void> _verifyTokenOnResume() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      // Get current token and verify it's still valid
+      final currentToken = await FirebaseMessaging.instance.getToken();
+      if (currentToken != null) {
+        // Update last verification time
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({
+              'tokenValidatedAt': FieldValue.serverTimestamp(),
+              'lastAppResume': FieldValue.serverTimestamp(),
+            });
+
+        print(
+          '✅ Token verified on app resume: ${currentToken.substring(0, 20)}...',
+        );
+      }
+    } catch (e) {
+      print('Error verifying token on resume: $e');
+    }
+  }
+
+  Future<void> _saveTokenStateOnPause() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      // Mark that app was paused with current token
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
+        {'lastAppPause': FieldValue.serverTimestamp(), 'appState': 'paused'},
+      );
+
+      print('💾 Token state saved on app pause');
+    } catch (e) {
+      print('Error saving token state on pause: $e');
+    }
+  }
+
+  Future<void> _preserveTokenOnDetach() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      // Mark app as properly closed (not crashed)
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({
+            'lastAppDetach': FieldValue.serverTimestamp(),
+            'appState': 'detached',
+            'properShutdown': true,
+          });
+
+      print('🔒 Token preserved on app detach');
+    } catch (e) {
+      print('Error preserving token on detach: $e');
+    }
   }
 
   Future<void> _initializeLocalNotifications() async {
-    // Ganti nama fungsi agar lebih jelas
+    // Enhanced Android channel configuration
+    const AndroidNotificationChannel fcmChannel = AndroidNotificationChannel(
+      'finblood_fcm_channel', // Channel ID - must match AndroidManifest.xml
+      'Finblood FCM Notifications', // Channel name
+      description:
+          'Notifikasi FCM dari aplikasi Finblood', // Channel description
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+      enableLights: true,
+      ledColor: Color(0xFF6C1022),
+    );
+
+    // Create the channel on Android device
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(fcmChannel);
+
+    // Initialize with enhanced settings
     const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings(
+          'ic_stat_finblood_logo',
+        ); // Use notification icon
     const DarwinInitializationSettings initializationSettingsIOS =
         DarwinInitializationSettings(
           requestAlertPermission: true,
@@ -399,12 +508,13 @@ class _HomePageState extends State<HomePage> {
           android: initializationSettingsAndroid,
           iOS: initializationSettingsIOS,
         );
+
     await flutterLocalNotificationsPlugin.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: (
         NotificationResponse notificationResponse,
       ) {
-        // Modifikasi handler untuk notifikasi lokal
+        // Enhanced notification response handler
         print(
           'Local notification tapped with payload: ${notificationResponse.payload}',
         );
@@ -423,6 +533,8 @@ class _HomePageState extends State<HomePage> {
         }
       },
     );
+
+    print('✅ Local notifications initialized with FCM channel');
   }
 
   void _handleNavigationFromNotification(Map<String, dynamic> data) {
@@ -441,15 +553,45 @@ class _HomePageState extends State<HomePage> {
         print("navigatorKey.currentContext is null, cannot navigate");
         // Anda bisa menyimpan data navigasi ini dan melakukannya saat context tersedia
       }
+    } else if (screen == 'KonfirmasiBersediaPage') {
+      // Navigasi ke halaman konfirmasi bersedia
+      if (navigatorKey.currentContext != null) {
+        Navigator.push(
+          navigatorKey.currentContext!,
+          MaterialPageRoute(
+            builder:
+                (context) => KonfirmasiBersediaPage(
+                  golonganDarah: data['golonganDarah'],
+                  notificationId: data['notificationId'],
+                ),
+          ),
+        );
+      } else {
+        print(
+          "navigatorKey.currentContext is null, cannot navigate to KonfirmasiBersediaPage",
+        );
+      }
+    } else if (screen == 'NotifikasiPage') {
+      // Navigasi ke halaman notifikasi
+      if (navigatorKey.currentContext != null) {
+        Navigator.push(
+          navigatorKey.currentContext!,
+          MaterialPageRoute(builder: (context) => const NotifikasiPage()),
+        );
+      } else {
+        print(
+          "navigatorKey.currentContext is null, cannot navigate to NotifikasiPage",
+        );
+      }
     }
     // Tambahkan kondisi lain jika ada halaman lain untuk dinavigasi
   }
 
-  // Fungsi baru untuk inisialisasi FCM di HomePageState
+  // Enhanced FCM token management with better debugging
   Future<void> _initializeFCM() async {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
 
-    // Meminta izin notifikasi (iOS & Android 13+)
+    // Request permissions first with explicit settings
     NotificationSettings settings = await messaging.requestPermission(
       alert: true,
       announcement: false,
@@ -460,85 +602,379 @@ class _HomePageState extends State<HomePage> {
       sound: true,
     );
 
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('User granted permission for FCM notifications');
-    } else if (settings.authorizationStatus ==
-        AuthorizationStatus.provisional) {
-      print('User granted provisional permission for FCM notifications');
-    } else {
+    print('🔔 FCM Permission Status: ${settings.authorizationStatus}');
+    print(
+      '🔊 Sound: ${settings.sound}, 🚨 Alert: ${settings.alert}, 🔰 Badge: ${settings.badge}',
+    );
+
+    if (settings.authorizationStatus != AuthorizationStatus.authorized) {
       print(
-        'User declined or has not accepted permission for FCM notifications',
+        '⚠️ Push notifications not fully authorized - continuing with in-app only',
       );
     }
 
-    // Subscribe ke topik untuk tes
-    try {
-      await FirebaseMessaging.instance.subscribeToTopic('pendonor_baru');
-      print('Berhasil subscribe ke topik: pendonor_baru');
-    } catch (e) {
-      print('Gagal subscribe ke topik: pendonor_baru. Error: $e');
+    // Get current user for token management
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      print('❌ No authenticated user - skipping FCM token setup');
+      return;
     }
 
-    // (Opsional) Refresh token jika berubah
-    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-      print('FCM Token refreshed: $newToken');
-      // Kirim token baru ini ke server aplikasi Anda jika diperlukan
+    // Enhanced token acquisition with detailed logging
+    try {
+      print('🔄 Starting enhanced FCM token acquisition...');
+
+      // Method 1: Try to get existing token
+      String? currentToken = await messaging.getToken();
+
+      if (currentToken != null && currentToken.isNotEmpty) {
+        print('✅ FCM Token acquired: ${currentToken.substring(0, 30)}...');
+        print('📏 Token length: ${currentToken.length}');
+
+        // Verify token format (typical FCM tokens are ~152+ characters)
+        if (currentToken.length < 100) {
+          print('⚠️ Token seems unusually short, forcing refresh...');
+          await messaging.deleteToken();
+          await Future.delayed(Duration(seconds: 2));
+          currentToken = await messaging.getToken();
+        }
+
+        if (currentToken != null) {
+          await _saveFCMTokenWithVerification(currentToken);
+
+          // Test the token immediately after saving
+          await _testFCMTokenDelivery(currentToken);
+        } else {
+          print('❌ Failed to acquire token after refresh');
+        }
+      } else {
+        print('⚠️ No FCM token available on first attempt');
+
+        // Try multiple approaches to get token
+        for (int attempt = 1; attempt <= 3; attempt++) {
+          print('🔄 Token acquisition attempt $attempt/3...');
+
+          await Future.delayed(Duration(seconds: attempt * 2));
+          currentToken = await messaging.getToken();
+
+          if (currentToken != null && currentToken.isNotEmpty) {
+            print(
+              '✅ Token acquired on attempt $attempt: ${currentToken.substring(0, 30)}...',
+            );
+            await _saveFCMTokenWithVerification(currentToken);
+            break;
+          } else {
+            print('❌ Attempt $attempt failed');
+          }
+        }
+
+        if (currentToken == null) {
+          print('❌ CRITICAL: Unable to acquire FCM token after 3 attempts');
+          print('📱 Device may not support FCM or have connectivity issues');
+        }
+      }
+    } catch (e) {
+      print('❌ Error in FCM token acquisition: $e');
+    }
+
+    // Subscribe to topic (for backward compatibility)
+    try {
+      await messaging.subscribeToTopic('pendonor_baru');
+      print('✅ Subscribed to topic: pendonor_baru');
+    } catch (e) {
+      print('❌ Failed to subscribe to topic: $e');
+    }
+
+    // Enhanced token refresh listener
+    messaging.onTokenRefresh.listen((newToken) {
+      print(
+        '🔄 FCM Token refreshed automatically: ${newToken.substring(0, 30)}...',
+      );
+      _saveFCMTokenWithVerification(newToken);
     });
 
-    // Listener untuk pesan FCM saat aplikasi di foreground
+    // Enhanced foreground message handler with better debugging
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('Got a message whilst in the foreground!');
-      print('Message data: ${message.data}');
+      print('\n🔥 [FCM FOREGROUND] === NEW MESSAGE RECEIVED ===');
+      print('🔥 [FCM FOREGROUND] Message ID: ${message.messageId}');
+      print('🔥 [FCM FOREGROUND] From: ${message.from}');
+      print('🔥 [FCM FOREGROUND] Sent time: ${message.sentTime}');
+      print('🔥 [FCM FOREGROUND] Data: ${message.data}');
 
       RemoteNotification? notification = message.notification;
-      AndroidNotification? android = message.notification?.android;
 
       if (notification != null) {
+        print('🔥 [FCM FOREGROUND] Notification payload found:');
+        print('🔥 [FCM FOREGROUND] Title: "${notification.title}"');
+        print('🔥 [FCM FOREGROUND] Body: "${notification.body}"');
+
+        // Always show local notification for foreground messages
+        _showLocalNotification(notification, message.data);
+      } else {
         print(
-          'Message also contained a notification: ${notification.title} - ${notification.body}',
+          '🔥 [FCM FOREGROUND] ⚠️ No notification payload - data-only message',
         );
-        // Tampilkan notifikasi lokal menggunakan flutter_local_notifications
-        // agar konsisten dan bisa dikustomisasi
-        flutterLocalNotificationsPlugin.show(
-          notification.hashCode, // ID unik untuk notifikasi
-          notification.title,
-          notification.body,
-          NotificationDetails(
-            android: AndroidNotificationDetails(
-              'finblood_fcm_channel', // ID channel baru untuk FCM
-              'Finblood FCM Notifications',
-              channelDescription: 'Notifikasi FCM dari aplikasi Finblood',
-              icon:
-                  'ic_stat_finblood_logo', // Menggunakan ikon notifikasi khusus
-              importance: Importance.max,
-              priority: Priority.high,
-              color: const Color(0xFF6C1022), // Tambahkan warna ini
-            ),
-            iOS: const DarwinNotificationDetails(
-              presentAlert: true,
-              presentBadge: true,
-              presentSound: true,
-            ),
-          ),
-          payload: jsonEncode(message.data), // Kirim data pesan sebagai payload
-        );
+
+        // For data-only messages, create a local notification if it's a donor request
+        if (message.data['type'] == 'donor_request') {
+          _showLocalNotificationFromData(message.data);
+        }
       }
+
+      print('🔥 [FCM FOREGROUND] === MESSAGE PROCESSING COMPLETE ===\n');
     });
 
-    // Listener untuk ketika pengguna membuka aplikasi dari notifikasi (saat background)
+    // Background message handler
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print('A new onMessageOpenedApp event was published!');
-      print('Message data: ${message.data}');
+      print('\n🔥 [FCM OPENED] App opened from notification');
+      print('🔥 [FCM OPENED] Message data: ${message.data}');
       _handleNavigationFromNotification(message.data);
     });
 
-    // Periksa apakah aplikasi dibuka dari notifikasi yang di-tap saat terminated
-    RemoteMessage? initialMessage =
-        await FirebaseMessaging.instance.getInitialMessage();
+    // Check if app was opened from terminated state
+    RemoteMessage? initialMessage = await messaging.getInitialMessage();
     if (initialMessage != null) {
-      print('App opened from a terminated state via FCM message!');
-      print('Initial message data: ${initialMessage.data}');
+      print('🔥 [FCM INITIAL] App opened from terminated state');
+      print('🔥 [FCM INITIAL] Message data: ${initialMessage.data}');
       _handleNavigationFromNotification(initialMessage.data);
+    }
+
+    print('✅ FCM initialization complete');
+  }
+
+  // Test FCM token delivery capability
+  Future<void> _testFCMTokenDelivery(String token) async {
+    try {
+      print('🧪 Testing FCM token delivery capability...');
+
+      // This is a simple test to verify the token format and basic validity
+      if (token.length < 100) {
+        print('❌ Token too short - likely invalid');
+        return;
+      }
+
+      if (!token.contains(':') && !token.contains('-')) {
+        print('❌ Token format appears invalid');
+        return;
+      }
+
+      print('✅ Token format appears valid');
+
+      // Additional test: Try to get token again to ensure consistency
+      final secondToken = await FirebaseMessaging.instance.getToken();
+      if (secondToken == token) {
+        print('✅ Token consistency verified');
+      } else {
+        print('⚠️ Token changed between calls - may indicate instability');
+      }
+    } catch (e) {
+      print('❌ Error testing token delivery: $e');
+    }
+  }
+
+  // Enhanced local notification display
+  Future<void> _showLocalNotification(
+    RemoteNotification notification,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      print('📱 Showing local notification: "${notification.title}"');
+
+      await flutterLocalNotificationsPlugin.show(
+        notification.hashCode,
+        notification.title,
+        notification.body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            'finblood_fcm_channel',
+            'Finblood FCM Notifications',
+            channelDescription: 'Notifikasi FCM dari aplikasi Finblood',
+            icon: 'ic_stat_finblood_logo',
+            importance: Importance.max,
+            priority: Priority.high,
+            color: const Color(0xFF6C1022),
+            showWhen: true,
+            enableVibration: true,
+            playSound: true,
+            ticker: notification.title,
+          ),
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        payload: jsonEncode(data),
+      );
+
+      print('✅ Local notification displayed successfully');
+    } catch (e) {
+      print('❌ Error showing local notification: $e');
+    }
+  }
+
+  // Show local notification from data-only message
+  Future<void> _showLocalNotificationFromData(Map<String, dynamic> data) async {
+    try {
+      final String title = 'Permintaan Donor Darah';
+      final String body = data['body'] ?? 'Ada permintaan donor darah baru';
+
+      print('📱 Creating local notification from data-only message');
+
+      await _showLocalNotification(
+        RemoteNotification(title: title, body: body),
+        data,
+      );
+    } catch (e) {
+      print('❌ Error creating notification from data: $e');
+    }
+  }
+
+  // Force refresh FCM token method
+  Future<void> _forceRefreshFCMToken() async {
+    try {
+      print('🔄 Starting force FCM token refresh...');
+
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+      // Delete old token
+      await messaging.deleteToken();
+      await Future.delayed(Duration(seconds: 2));
+
+      // Generate new token
+      String? newToken = await messaging.getToken();
+
+      if (newToken != null && newToken.isNotEmpty) {
+        print('🆕 New FCM token generated: ${newToken.substring(0, 20)}...');
+        await _saveFCMTokenWithVerification(newToken);
+        print('✅ Force refresh completed successfully');
+      } else {
+        print('❌ Failed to generate new FCM token');
+      }
+    } catch (e) {
+      print('❌ Error in force refresh FCM token: $e');
+    }
+  }
+
+  // Fungsi untuk menyimpan FCM token ke Firestore dengan retry mechanism
+  Future<void> _saveFCMToken(String token) async {
+    int retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries) {
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null) {
+          print('No authenticated user found when trying to save FCM token');
+          return;
+        }
+
+        print(
+          'Attempting to save FCM token for user: ${user.uid} (attempt ${retryCount + 1})',
+        );
+        print('FCM token: ${token.substring(0, 20)}...');
+
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({
+              'fcmToken': token,
+              'tokenUpdatedAt': FieldValue.serverTimestamp(),
+              'tokenUpdateAttempts': retryCount + 1,
+            });
+
+        print('FCM token saved to Firestore successfully');
+
+        // Verify token was saved
+        final doc =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .get();
+        if (doc.exists && doc.data()?['fcmToken'] == token) {
+          print('Verification: FCM token matches in Firestore');
+          return; // Success, exit retry loop
+        } else {
+          print('Verification: FCM token mismatch in Firestore');
+          throw Exception('Token verification failed');
+        }
+      } catch (e) {
+        retryCount++;
+        print('Error saving FCM token (attempt $retryCount): $e');
+
+        if (retryCount < maxRetries) {
+          print('Retrying FCM token save in ${retryCount * 2} seconds...');
+          await Future.delayed(Duration(seconds: retryCount * 2));
+        } else {
+          print('Failed to save FCM token after $maxRetries attempts');
+        }
+      }
+    }
+  }
+
+  // Enhanced token saving with additional verification and cleanup
+  Future<void> _saveFCMTokenWithVerification(String token) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      print('❌ No authenticated user for token saving');
+      return;
+    }
+
+    print('🔄 Saving FCM token with verification for user: ${user.uid}');
+    print('🔑 Token: ${token.substring(0, 30)}...');
+
+    try {
+      // First, clean up any old invalid tokens for this user
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
+        {
+          'fcmToken': token,
+          'tokenUpdatedAt': FieldValue.serverTimestamp(),
+          'tokenValidatedAt': FieldValue.serverTimestamp(),
+          'deviceInfo': {
+            'platform': Theme.of(context).platform.toString(),
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          },
+          'appState': 'active',
+          'lastAppResume': FieldValue.serverTimestamp(),
+        },
+      );
+
+      print('📝 Token saved to Firestore, verifying...');
+
+      // Double verification with delay
+      await Future.delayed(Duration(milliseconds: 1000));
+
+      final verificationDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+
+      if (verificationDoc.exists &&
+          verificationDoc.data()?['fcmToken'] == token) {
+        print('✅ FCM token successfully saved and verified');
+        print('📊 Token info: Length: ${token.length}, Valid: true');
+
+        // Test the token by attempting a small test notification to self (optional)
+        await _testTokenValidity(token);
+      } else {
+        throw Exception('Token verification failed after save');
+      }
+    } catch (e) {
+      print('❌ Error in enhanced token saving: $e');
+      // Fallback to basic saving method
+      await _saveFCMToken(token);
+    }
+  }
+
+  // Optional: Test token validity
+  Future<void> _testTokenValidity(String token) async {
+    try {
+      // This could call a test cloud function or just log for monitoring
+      print('🧪 Testing token validity: ${token.substring(0, 20)}...');
+      // Implementation depends on your monitoring needs
+    } catch (e) {
+      print('Token validity test failed: $e');
     }
   }
 
@@ -663,6 +1099,30 @@ class _HomePageState extends State<HomePage> {
                 await FirebaseAuth.instance.signOut();
                 print("Pengguna keluar dari Firebase");
 
+                // Clear admin role cache
+                await AdminUtils.clearCache();
+                print("Admin role cache cleared");
+
+                // Clear FCM token from Firestore during logout
+                try {
+                  final currentUser = FirebaseAuth.instance.currentUser;
+                  if (currentUser != null) {
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(currentUser.uid)
+                        .update({
+                          'fcmToken': FieldValue.delete(),
+                          'needsTokenRefresh': true,
+                        });
+                    print('[LOGOUT] ✅ FCM token cleared from Firestore');
+                  }
+                } catch (tokenError) {
+                  print(
+                    '[LOGOUT] ⚠️ Failed to clear FCM token during logout: $tokenError',
+                  );
+                  // Don't block logout flow if token cleanup fails
+                }
+
                 // Untuk pembersihan yang lebih menyeluruh, buat ulang instance Firebase
                 try {
                   await Firebase.initializeApp(
@@ -708,7 +1168,7 @@ class _HomePageState extends State<HomePage> {
                 bottomRight: Radius.circular(25),
               ),
             ),
-            padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -796,34 +1256,47 @@ class _HomePageState extends State<HomePage> {
                   },
                 ),
                 const SizedBox(height: 0),
-                SizedBox(
-                  width: 272,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const DaftarPendonorListPage(),
+                FutureBuilder<bool>(
+                  future: AdminUtils.isCurrentUserAdmin(),
+                  builder: (context, snapshot) {
+                    final isAdmin = snapshot.data ?? false;
+
+                    // Only show "Lihat Daftar Pendonor" button for admin users
+                    if (!isAdmin) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return SizedBox(
+                      width: 272,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => const DaftarPendonorListPage(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Lihat Daftar Pendonor',
+                          style: TextStyle(fontWeight: FontWeight.w500),
                         ),
-                      );
-                    },
-                    child: const Text(
-                      'Lihat Daftar Pendonor',
-                      style: TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(272, 51),
-                      textStyle: const TextStyle(
-                        fontSize: 18,
-                        fontFamily: 'Poppins',
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(272, 51),
+                          textStyle: const TextStyle(
+                            fontSize: 18,
+                            fontFamily: 'Poppins',
+                          ),
+                          backgroundColor: const Color(0xFFCA4A63),
+                          foregroundColor: Colors.white,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(50)),
+                          ),
+                        ),
                       ),
-                      backgroundColor: const Color(0xFFCA4A63),
-                      foregroundColor: Colors.white,
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(50)),
-                      ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 10),
                 // Tombol dinamis berdasarkan role user
@@ -832,69 +1305,79 @@ class _HomePageState extends State<HomePage> {
                   builder: (context, snapshot) {
                     final isAdmin = snapshot.data ?? false;
 
-                    return SizedBox(
-                      width: 272,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (isAdmin) {
-                            // Navigasi ke halaman Cari Pendonor untuk admin
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => const AdminSearchDonorPage(),
-                              ),
-                            );
-                          } else {
-                            // Navigasi ke halaman Daftar Pendonor untuk user biasa
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => const DaftarPendonorPage(),
-                              ),
-                            );
-                          }
-                        },
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child:
-                              isAdmin
-                                  ? Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.search, color: Colors.white),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Cari Pendonor',
+                    return Column(
+                      children: [
+                        SizedBox(
+                          width: 272,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (isAdmin) {
+                                // Navigasi ke halaman Cari Pendonor untuk admin
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) =>
+                                            const AdminSearchDonorPage(),
+                                  ),
+                                );
+                              } else {
+                                // Navigasi ke halaman Daftar Pendonor untuk user biasa
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => const DaftarPendonorPage(),
+                                  ),
+                                );
+                              }
+                            },
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child:
+                                  isAdmin
+                                      ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.search,
+                                            color: Colors.white,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Cari Pendonor',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                      : Text(
+                                        'Daftar Menjadi Pendonor',
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
-                                    ],
-                                  )
-                                  : Text(
-                                    'Daftar Menjadi Pendonor',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(272, 51),
-                          textStyle: const TextStyle(
-                            fontSize: 18,
-                            fontFamily: 'Poppins',
-                          ),
-                          backgroundColor: const Color(
-                            0xFFCA4A63,
-                          ), // Merah untuk semua user
-                          foregroundColor: Colors.white,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.all(Radius.circular(50)),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(272, 51),
+                              textStyle: const TextStyle(
+                                fontSize: 18,
+                                fontFamily: 'Poppins',
+                              ),
+                              backgroundColor: const Color(
+                                0xFFCA4A63,
+                              ), // Merah untuk semua user
+                              foregroundColor: Colors.white,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(50),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     );
                   },
                 ),
@@ -987,31 +1470,25 @@ class _HomePageState extends State<HomePage> {
                   }
                   final data = snapshot.data ?? [];
                   if (data.isEmpty) {
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 16.0),
+                    return Center(
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Center(
-                            child: Image.asset(
-                              'assets/images/listempty.png',
-                              height: 150,
-                              fit: BoxFit.contain,
-                            ),
+                          Image.asset(
+                            'assets/images/emptybw.png',
+                            height: 120,
+                            fit: BoxFit.contain,
                           ),
-                          const SizedBox(height: 8),
-                          const Center(
-                            child: Text(
-                              'Belum ada pendonor.',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF757575),
-                                fontFamily: 'Poppins',
-                              ),
-                              textAlign: TextAlign.center,
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Belum ada pendonor.',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF757575),
+                              fontFamily: 'Poppins',
                             ),
+                            textAlign: TextAlign.center,
                           ),
                         ],
                       ),
@@ -2057,32 +2534,28 @@ class _DaftarPendonorListPageState extends State<DaftarPendonorListPage> {
                         }
                         if (docs.isEmpty) {
                           return Padding(
-                            padding: const EdgeInsets.only(top: 60.0),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Center(
-                                  child: Image.asset(
-                                    'assets/images/listempty.png',
-                                    height: 150,
+                            padding: const EdgeInsets.only(top: 100),
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  Image.asset(
+                                    'assets/images/emptybw.png',
+                                    height: 120,
                                     fit: BoxFit.contain,
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                const Center(
-                                  child: Text(
+                                  const SizedBox(height: 16),
+                                  const Text(
                                     'Belum ada pendonor',
                                     style: TextStyle(
-                                      fontSize: 20,
+                                      fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                       color: Color(0xFF757575),
                                       fontFamily: 'Poppins',
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           );
                         }
@@ -2232,14 +2705,17 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _namaController = TextEditingController();
   final TextEditingController _hpController = TextEditingController();
-  String? _selectedKampus;
-  String? _selectedGolongan;
 
-  // Local cache untuk optimasi initial render
-  bool?
-  _cachedRegistrationStatus; // null = unknown, true = registered, false = not registered
-  Map<String, dynamic>? _cachedDonorData;
-  String? _cachedDonorId;
+  // Use ValueNotifier to avoid setState for dropdown changes
+  final ValueNotifier<String?> _selectedKampusNotifier = ValueNotifier<String?>(
+    null,
+  );
+  final ValueNotifier<String?> _selectedGolonganNotifier =
+      ValueNotifier<String?>(null);
+
+  // Background sync listener
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+  _backgroundSyncSubscription;
 
   final List<String> kampusList = [
     'Universitas Udayana',
@@ -2268,37 +2744,43 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
   @override
   void initState() {
     super.initState();
-    _loadCachedRegistrationStatus();
   }
 
-  Future<void> _loadCachedRegistrationStatus() async {
+  @override
+  void dispose() {
+    _namaController.dispose();
+    _hpController.dispose();
+    _selectedKampusNotifier.dispose();
+    _selectedGolonganNotifier.dispose();
+    _backgroundSyncSubscription?.cancel();
+    super.dispose();
+  }
+
+  // Get current selected values
+  String? get _selectedKampus => _selectedKampusNotifier.value;
+  String? get _selectedGolongan => _selectedGolonganNotifier.value;
+
+  // Function to check registration status
+  Future<Map<String, dynamic>?> _checkRegistrationStatus() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
       final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return null;
 
-      if (currentUser != null) {
-        final isRegistered = prefs.getBool(
-          'donor_registered_${currentUser.uid}',
-        );
-        final cachedDataString = prefs.getString(
-          'donor_data_${currentUser.uid}',
-        );
-        final cachedId = prefs.getString('donor_id_${currentUser.uid}');
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('pendonor')
+              .where('user_id', isEqualTo: currentUser.uid)
+              .limit(1)
+              .get();
 
-        if (mounted) {
-          setState(() {
-            _cachedRegistrationStatus = isRegistered;
-            if (cachedDataString != null) {
-              _cachedDonorData = Map<String, dynamic>.from(
-                jsonDecode(cachedDataString) as Map,
-              );
-            }
-            _cachedDonorId = cachedId;
-          });
-        }
+      if (snapshot.docs.isNotEmpty) {
+        final doc = snapshot.docs.first;
+        return {'data': doc.data(), 'id': doc.id};
       }
+      return null;
     } catch (e) {
-      print('Error loading cached registration status: $e');
+      print('Error checking registration status: $e');
+      return null;
     }
   }
 
@@ -2332,13 +2814,6 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
     } catch (e) {
       print('Error saving registration status: $e');
     }
-  }
-
-  @override
-  void dispose() {
-    _namaController.dispose();
-    _hpController.dispose();
-    super.dispose();
   }
 
   Future<void> _deleteDonor(String donorId) async {
@@ -2393,14 +2868,6 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
         // Update local cache setelah berhasil hapus
         await _saveRegistrationStatus(isRegistered: false);
 
-        if (mounted) {
-          setState(() {
-            _cachedRegistrationStatus = false;
-            _cachedDonorData = null;
-            _cachedDonorId = null;
-          });
-        }
-
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -2409,6 +2876,9 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
             ),
           );
         }
+
+        // Refresh the page
+        setState(() {});
       } catch (e) {
         print('Error deleting donor: $e');
         if (context.mounted) {
@@ -2533,21 +3003,12 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
         donorId: docRef.id,
       );
 
-      // Update UI state
-      if (mounted) {
-        setState(() {
-          _cachedRegistrationStatus = true;
-          _cachedDonorData = newDonorData;
-          _cachedDonorId = docRef.id;
-        });
-      }
-
       // Clear form setelah berhasil mendaftar
       _namaController.clear();
       _hpController.clear();
       setState(() {
-        _selectedKampus = null;
-        _selectedGolongan = null;
+        _selectedKampusNotifier.value = null;
+        _selectedGolonganNotifier.value = null;
       });
 
       // Show success message
@@ -2560,6 +3021,9 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
           ),
         );
       }
+
+      // Refresh the page to show registered status
+      setState(() {});
     } catch (e) {
       print('Error _submitForm: $e');
 
@@ -2727,288 +3191,361 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
   }
 
   Widget _buildRegistrationForm() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Nama Lengkap',
-              style: TextStyle(
-                color: Color(0xFF6C1022),
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
+    return RepaintBoundary(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Nama Lengkap',
+                style: TextStyle(
+                  color: Color(0xFF6C1022),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            TextFormField(
-              controller: _namaController,
-              decoration: InputDecoration(
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C1022),
-                    width: 2.0,
+              const SizedBox(height: 4),
+              TextFormField(
+                controller: _namaController,
+                decoration: InputDecoration(
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: const BorderRadius.all(Radius.circular(15)),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF6C1022),
+                      width: 2.0,
+                    ),
                   ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C1022),
-                    width: 2.5,
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: const BorderRadius.all(Radius.circular(15)),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF6C1022),
+                      width: 2.5,
+                    ),
                   ),
-                ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(color: Colors.red, width: 2.0),
-                ),
-                focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(color: Colors.red, width: 2.5),
-                ),
-                errorStyle: const TextStyle(color: Colors.red),
-              ),
-              validator:
-                  (value) =>
-                      value == null || value.trim().isEmpty
-                          ? 'Nama wajib diisi'
-                          : null,
-              style: const TextStyle(
-                color: Color(0xFF6C1022),
-                fontFamily: 'Poppins',
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Nomor HP',
-              style: TextStyle(
-                color: Color(0xFF6C1022),
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 4),
-            TextFormField(
-              controller: _hpController,
-              decoration: InputDecoration(
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C1022),
-                    width: 2.0,
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: const BorderRadius.all(Radius.circular(15)),
+                    borderSide: const BorderSide(color: Colors.red, width: 2.0),
                   ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C1022),
-                    width: 2.5,
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: const BorderRadius.all(Radius.circular(15)),
+                    borderSide: const BorderSide(color: Colors.red, width: 2.5),
                   ),
+                  errorStyle: const TextStyle(color: Colors.red),
                 ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(color: Colors.red, width: 2.0),
+                validator:
+                    (value) =>
+                        value == null || value.trim().isEmpty
+                            ? 'Nama wajib diisi'
+                            : null,
+                style: const TextStyle(
+                  color: Color(0xFF6C1022),
+                  fontFamily: 'Poppins',
                 ),
-                focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(color: Colors.red, width: 2.5),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Nomor HP',
+                style: TextStyle(
+                  color: Color(0xFF6C1022),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
                 ),
-                errorStyle: const TextStyle(color: Colors.red),
               ),
-              validator:
-                  (value) =>
-                      value == null || value.trim().isEmpty
-                          ? 'Nomor HP wajib diisi'
-                          : null,
-              keyboardType: TextInputType.phone,
-              style: const TextStyle(
-                color: Color(0xFF6C1022),
-                fontFamily: 'Poppins',
+              const SizedBox(height: 4),
+              TextFormField(
+                controller: _hpController,
+                decoration: InputDecoration(
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: const BorderRadius.all(Radius.circular(15)),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF6C1022),
+                      width: 2.0,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: const BorderRadius.all(Radius.circular(15)),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF6C1022),
+                      width: 2.5,
+                    ),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: const BorderRadius.all(Radius.circular(15)),
+                    borderSide: const BorderSide(color: Colors.red, width: 2.0),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: const BorderRadius.all(Radius.circular(15)),
+                    borderSide: const BorderSide(color: Colors.red, width: 2.5),
+                  ),
+                  errorStyle: const TextStyle(color: Colors.red),
+                ),
+                validator:
+                    (value) =>
+                        value == null || value.trim().isEmpty
+                            ? 'Nomor HP wajib diisi'
+                            : null,
+                keyboardType: TextInputType.phone,
+                style: const TextStyle(
+                  color: Color(0xFF6C1022),
+                  fontFamily: 'Poppins',
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Pilih Kampus',
-              style: TextStyle(
-                color: Color(0xFF6C1022),
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
+              const SizedBox(height: 4),
+              const Text(
+                'Pilih Kampus',
+                style: TextStyle(
+                  color: Color(0xFF6C1022),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            DropdownButtonFormField2<String>(
-              value: _selectedKampus,
-              isExpanded: true,
-              items:
-                  kampusList
-                      .map(
-                        (kampus) => DropdownMenuItem(
-                          value: kampus,
-                          child: Text(
-                            kampus,
-                            style: const TextStyle(
-                              color: Color(0xFF6C1022),
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'Poppins',
-                            ),
-                            overflow: TextOverflow.ellipsis,
+              const SizedBox(height: 4),
+              // Wrap dropdown in RepaintBoundary for better performance
+              RepaintBoundary(
+                child: ValueListenableBuilder<String?>(
+                  valueListenable: _selectedKampusNotifier,
+                  builder: (context, selectedKampus, child) {
+                    return DropdownButtonFormField2<String>(
+                      value: selectedKampus,
+                      isExpanded: true,
+                      items:
+                          kampusList
+                              .map(
+                                (kampus) => DropdownMenuItem(
+                                  value: kampus,
+                                  child: Text(
+                                    kampus,
+                                    style: const TextStyle(
+                                      color: Color(0xFF6C1022),
+                                      fontWeight: FontWeight.w600,
+                                      fontFamily: 'Poppins',
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                      onChanged: (value) {
+                        _selectedKampusNotifier.value = value;
+                      },
+                      decoration: InputDecoration(
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(15),
+                          ),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF6C1022),
+                            width: 2.0,
                           ),
                         ),
-                      )
-                      .toList(),
-              onChanged: (val) => setState(() => _selectedKampus = val),
-              decoration: InputDecoration(
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C1022),
-                    width: 2.0,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C1022),
-                    width: 2.5,
-                  ),
-                ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(color: Colors.red, width: 2.0),
-                ),
-                focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(color: Colors.red, width: 2.5),
-                ),
-                errorStyle: const TextStyle(color: Colors.red),
-              ),
-              validator:
-                  (value) => value == null ? 'Kampus wajib dipilih' : null,
-              dropdownStyleData: DropdownStyleData(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                maxHeight: 400,
-                scrollbarTheme: ScrollbarThemeData(
-                  thumbVisibility: MaterialStateProperty.all(true),
-                  thickness: MaterialStateProperty.all(6),
-                  radius: const Radius.circular(8),
-                  thumbColor: MaterialStateProperty.all(
-                    const Color(0xFF6C1022),
-                  ),
-                ),
-              ),
-              menuItemStyleData: const MenuItemStyleData(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-              ),
-              style: const TextStyle(
-                color: Color(0xFF6C1022),
-                fontFamily: 'Poppins',
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Pilih Golongan Darah',
-              style: TextStyle(
-                color: Color(0xFF6C1022),
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 4),
-            DropdownButtonFormField2<String>(
-              value: _selectedGolongan,
-              isExpanded: true,
-              items:
-                  golonganList
-                      .map(
-                        (gol) => DropdownMenuItem(
-                          value: gol,
-                          child: Text(
-                            gol,
-                            style: const TextStyle(
-                              color: Color(0xFF6C1022),
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'Poppins',
-                            ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(15),
+                          ),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF6C1022),
+                            width: 2.5,
                           ),
                         ),
-                      )
-                      .toList(),
-              onChanged: (val) => setState(() => _selectedGolongan = val),
-              decoration: InputDecoration(
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C1022),
-                    width: 2.0,
-                  ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(15),
+                          ),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 2.0,
+                          ),
+                        ),
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(15),
+                          ),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 2.5,
+                          ),
+                        ),
+                        errorStyle: const TextStyle(color: Colors.red),
+                      ),
+                      validator:
+                          (value) =>
+                              value == null ? 'Kampus wajib dipilih' : null,
+                      dropdownStyleData: DropdownStyleData(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(15),
+                          color: Colors.white,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              spreadRadius: 1,
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        maxHeight: 400,
+                        scrollbarTheme: ScrollbarThemeData(
+                          thumbVisibility: MaterialStateProperty.all(true),
+                          thickness: MaterialStateProperty.all(6),
+                          radius: const Radius.circular(8),
+                          thumbColor: MaterialStateProperty.all(
+                            const Color(0xFF6C1022),
+                          ),
+                        ),
+                      ),
+                      menuItemStyleData: const MenuItemStyleData(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        height: 48,
+                      ),
+                      style: const TextStyle(
+                        color: Color(0xFF6C1022),
+                        fontFamily: 'Poppins',
+                      ),
+                    );
+                  },
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C1022),
-                    width: 2.5,
-                  ),
-                ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(color: Colors.red, width: 2.0),
-                ),
-                focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(15)),
-                  borderSide: const BorderSide(color: Colors.red, width: 2.5),
-                ),
-                errorStyle: const TextStyle(color: Colors.red),
               ),
-              validator:
-                  (value) =>
-                      value == null ? 'Golongan darah wajib dipilih' : null,
-              dropdownStyleData: DropdownStyleData(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
+              const SizedBox(height: 4),
+              const Text(
+                'Pilih Golongan Darah',
+                style: TextStyle(
+                  color: Color(0xFF6C1022),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
                 ),
-                maxHeight: 300,
               ),
-              menuItemStyleData: const MenuItemStyleData(
-                padding: EdgeInsets.symmetric(horizontal: 16),
+              const SizedBox(height: 4),
+              // Wrap second dropdown in RepaintBoundary
+              RepaintBoundary(
+                child: ValueListenableBuilder<String?>(
+                  valueListenable: _selectedGolonganNotifier,
+                  builder: (context, selectedGolongan, child) {
+                    return DropdownButtonFormField2<String>(
+                      value: selectedGolongan,
+                      isExpanded: true,
+                      items:
+                          golonganList
+                              .map(
+                                (gol) => DropdownMenuItem(
+                                  value: gol,
+                                  child: Text(
+                                    gol,
+                                    style: const TextStyle(
+                                      color: Color(0xFF6C1022),
+                                      fontWeight: FontWeight.w600,
+                                      fontFamily: 'Poppins',
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                      onChanged: (value) {
+                        _selectedGolonganNotifier.value = value;
+                      },
+                      decoration: InputDecoration(
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(15),
+                          ),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF6C1022),
+                            width: 2.0,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(15),
+                          ),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF6C1022),
+                            width: 2.5,
+                          ),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(15),
+                          ),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 2.0,
+                          ),
+                        ),
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(15),
+                          ),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 2.5,
+                          ),
+                        ),
+                        errorStyle: const TextStyle(color: Colors.red),
+                      ),
+                      validator:
+                          (value) =>
+                              value == null
+                                  ? 'Golongan darah wajib dipilih'
+                                  : null,
+                      dropdownStyleData: DropdownStyleData(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(15),
+                          color: Colors.white,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              spreadRadius: 1,
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        maxHeight: 300,
+                      ),
+                      menuItemStyleData: const MenuItemStyleData(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        height: 48,
+                      ),
+                      style: const TextStyle(
+                        color: Color(0xFF6C1022),
+                        fontFamily: 'Poppins',
+                      ),
+                    );
+                  },
+                ),
               ),
-              style: const TextStyle(
-                color: Color(0xFF6C1022),
-                fontFamily: 'Poppins',
-              ),
-            ),
-            const SizedBox(height: 36),
-            Center(
-              child: SizedBox(
-                width: 183,
-                height: 51,
-                child: ElevatedButton(
-                  onPressed: _submitForm,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6C1022),
-                    foregroundColor: Colors.white,
-                    textStyle: const TextStyle(
-                      fontSize: 18,
-                      fontFamily: 'Poppins',
+              const SizedBox(height: 36),
+              Center(
+                child: SizedBox(
+                  width: 183,
+                  height: 51,
+                  child: ElevatedButton(
+                    onPressed: _submitForm,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6C1022),
+                      foregroundColor: Colors.white,
+                      textStyle: const TextStyle(
+                        fontSize: 18,
+                        fontFamily: 'Poppins',
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(50),
+                      ),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(50),
-                    ),
-                  ),
-                  child: const Text(
-                    'DAFTAR',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Poppins',
+                    child: const Text(
+                      'DAFTAR',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Poppins',
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -3054,99 +3591,31 @@ class _DaftarPendonorPageState extends State<DaftarPendonorPage> {
                 ),
               ),
             ),
-            // Hybrid approach: Cache untuk initial render + StreamBuilder untuk sync
-            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream:
-                  FirebaseFirestore.instance
-                      .collection('pendonor')
-                      .where('user_id', isEqualTo: currentUser.uid)
-                      .snapshots(),
+            // Use FutureBuilder to prevent glitch
+            FutureBuilder<Map<String, dynamic>?>(
+              future: _checkRegistrationStatus(),
               builder: (context, snapshot) {
-                // Update cache berdasarkan data stream untuk akurasi
-                if (snapshot.hasData) {
-                  final docs = snapshot.data!.docs;
-                  final bool streamIsRegistered = docs.isNotEmpty;
-
-                  // Sync cache dengan data terbaru dari Firestore
-                  WidgetsBinding.instance.addPostFrameCallback((_) async {
-                    if (streamIsRegistered && docs.isNotEmpty) {
-                      final doc = docs.first;
-                      final donorData = doc.data();
-                      final donorId = doc.id;
-
-                      // Update cache jika ada perbedaan
-                      if (_cachedRegistrationStatus != true ||
-                          _cachedDonorId != donorId) {
-                        await _saveRegistrationStatus(
-                          isRegistered: true,
-                          donorData: donorData,
-                          donorId: donorId,
-                        );
-
-                        if (mounted) {
-                          setState(() {
-                            _cachedRegistrationStatus = true;
-                            _cachedDonorData = donorData;
-                            _cachedDonorId = donorId;
-                          });
-                        }
-                      }
-                    } else if (!streamIsRegistered &&
-                        _cachedRegistrationStatus == true) {
-                      // Data dihapus di Firestore, update cache
-                      await _saveRegistrationStatus(isRegistered: false);
-
-                      if (mounted) {
-                        setState(() {
-                          _cachedRegistrationStatus = false;
-                          _cachedDonorData = null;
-                          _cachedDonorId = null;
-                        });
-                      }
-                    }
-                  });
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  // Show nothing while loading to prevent glitch
+                  return const SizedBox.shrink();
                 }
 
-                // Handle error dari Firestore
                 if (snapshot.hasError) {
-                  return Padding(
-                    padding: const EdgeInsets.all(50.0),
-                    child: Center(
-                      child: Text(
-                        'Terjadi error: ${snapshot.error}',
-                        style: const TextStyle(fontFamily: 'Poppins'),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
+                  // On error, show registration form
+                  return _buildRegistrationForm();
                 }
 
-                // Prioritas rendering:
-                // 1. Cache data (untuk instant render)
-                // 2. Stream data (untuk akurasi)
-                // 3. Fallback ke form (jika tidak ada data)
-
-                // Jika ada cache data, gunakan untuk instant render
-                if (_cachedRegistrationStatus == true &&
-                    _cachedDonorData != null &&
-                    _cachedDonorId != null) {
+                final registrationData = snapshot.data;
+                if (registrationData != null) {
+                  // User is registered, show registered view
                   return _buildDonorDataView(
-                    _cachedDonorData!,
-                    _cachedDonorId!,
+                    registrationData['data'] as Map<String, dynamic>,
+                    registrationData['id'] as String,
                   );
+                } else {
+                  // User not registered, show registration form
+                  return _buildRegistrationForm();
                 }
-
-                // Jika stream sudah ada data, gunakan stream data
-                if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-                  final doc = snapshot.data!.docs.first;
-                  final donorData = doc.data();
-                  final donorId = doc.id;
-                  return _buildDonorDataView(donorData, donorId);
-                }
-
-                // Jika cache menunjukkan tidak terdaftar, atau tidak ada data
-                // langsung tampilkan form (no loading)
-                return _buildRegistrationForm();
               },
             ),
           ],

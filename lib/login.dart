@@ -4,6 +4,7 @@ import 'main.dart';
 import 'register.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -437,6 +438,35 @@ class _LoginPageState extends State<LoginPage> {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (context) => const HomePage()),
           );
+        }
+
+        // Refresh FCM token after successful login to ensure fresh token
+        print('[LOGIN] Refreshing FCM token after successful login');
+        try {
+          // Import FirebaseMessaging to call token refresh
+          final fcmToken = await FirebaseMessaging.instance.getToken(
+            vapidKey: null,
+          );
+          if (fcmToken != null) {
+            // Update token in Firestore
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .update({
+                  'fcmToken': fcmToken,
+                  'tokenUpdatedAt': FieldValue.serverTimestamp(),
+                  'tokenValidatedAt': FieldValue.serverTimestamp(),
+                  'needsTokenRefresh': false,
+                });
+            print(
+              '[LOGIN] ✅ FCM token refreshed and saved after login: ${fcmToken.substring(0, 20)}...',
+            );
+          }
+        } catch (tokenError) {
+          print(
+            '[LOGIN] ⚠️ Failed to refresh FCM token after login: $tokenError',
+          );
+          // Don't block login flow if token refresh fails
         }
       }
     } on FirebaseAuthException catch (e) {
